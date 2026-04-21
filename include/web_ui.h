@@ -14,15 +14,17 @@ body{font-family:-apple-system,system-ui,"PingFang SC","Microsoft YaHei",sans-se
 .page-header{text-align:center;padding:10px 0 22px}
 h1{font-size:22px;color:#38bdf8;font-weight:700;letter-spacing:1px}
 .summary-strip{display:flex;align-items:stretch;justify-content:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:16px;padding:14px 16px;background:rgba(19,29,50,.92);border:1px solid rgba(56,189,248,.12);border-radius:16px;box-shadow:0 18px 40px rgba(2,8,23,.18);backdrop-filter:blur(8px)}
-.summary-title{display:flex;align-items:center;justify-content:center;flex:0 0 auto;min-width:136px;padding:2px 4px}
+.summary-title{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:0 0 auto;min-width:136px;padding:2px 4px;gap:6px}
 .summary-title h1{margin:0;font-size:30px;line-height:1.02;text-align:center}
 .summary-title h1 span{display:block}
+.summary-title-version{font-size:10px;line-height:1;color:#64748b;letter-spacing:.8px}
 .summary-group{display:flex;align-items:stretch;justify-content:flex-start;gap:10px;flex-wrap:wrap;flex:1 1 320px}
 .summary-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex:0 0 auto;margin-left:auto}
-.summary-action{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-width:118px;padding:10px 12px;border-radius:14px;background:#172033;border:1px solid rgba(56,189,248,.08);text-align:center}
+.summary-action{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;width:90px;min-width:90px;padding:10px 12px;border-radius:14px;background:#172033;border:1px solid rgba(56,189,248,.08);text-align:center}
 .summary-action-copy{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;min-width:0;text-align:center}
 .summary-action-label{font-size:13px;font-weight:700;color:#e2e8f0}
-.summary-restart-btn{min-width:92px;padding:10px 18px;border-radius:999px;background:#e31937;color:#fff;border:none}
+.summary-restart-btn{width:60px;min-width:60px;min-height:62px;padding:10px 6px;border-radius:18px;background:#e31937;color:#fff;border:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;line-height:1.05;text-align:center;white-space:normal;font-weight:700}
+.summary-restart-btn span{display:block}
 .summary-restart-btn:hover:not(:disabled){background:#c41530}
 .summary-restart-btn:disabled{opacity:.4;cursor:not-allowed}
 .summary-pill{min-width:110px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:10px 12px;border-radius:12px;background:#172033;border:1px solid rgba(56,189,248,.08);text-align:center}
@@ -101,6 +103,11 @@ select:disabled,.text-input:disabled,.toggle input:disabled+.slider{opacity:.45;
 .msg{text-align:center;font-size:12px;margin-top:8px;min-height:16px}
 .msg.ok{color:#22c55e}
 .msg.err{color:#ef4444}
+.ota-layout{display:grid;grid-template-columns:1fr;gap:16px}
+.ota-panel{background:#172033;border:1px solid rgba(56,189,248,.08);border-radius:14px;padding:16px}
+.ota-panel-title{font-size:14px;font-weight:700;color:#e2e8f0;margin-bottom:12px}
+.ota-panel .actions{margin-top:14px}
+.ota-panel .hint{margin-top:10px}
 .inline-actions{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .inline-actions .field-label{margin-bottom:0}
 .section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px}
@@ -115,10 +122,10 @@ select:disabled,.text-input:disabled,.toggle input:disabled+.slider{opacity:.45;
 .tag.busy{background:rgba(56,189,248,.16);color:#7dd3fc}
 .tag.warn{background:rgba(234,179,8,.16);color:#fde68a}
 .empty-box{border:1px dashed #334155;border-radius:10px;padding:12px;text-align:center;font-size:12px;color:#64748b}
-.bucket-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:10px}
+.bucket-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:12px;margin-top:10px}
 .bucket-grid .field{padding:0;border-top:none}
-.number-input-wrap{position:relative}
-.speed-offset-input{padding-right:28px}
+.number-input-wrap{position:relative;display:flex;align-items:center;width:100%;min-width:80px;max-width:100%}
+.speed-offset-input{width:100%;min-width:80px;max-width:100%;padding-right:28px}
 .number-suffix{position:absolute;top:50%;right:12px;transform:translateY(-50%);font-size:12px;color:#64748b;pointer-events:none}
 .speed-offset-input::-webkit-outer-spin-button,.speed-offset-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .speed-offset-input[type=number]{-moz-appearance:textfield}
@@ -152,7 +159,8 @@ select:disabled,.text-input:disabled,.toggle input:disabled+.slider{opacity:.45;
 .status-controls-panel .field+.field{border-top:none}
 .status-controls-panel .row:last-child{border-bottom:none}
 .status-controls-panel .field-label{margin-bottom:0;flex:0 0 92px}
-.status-control-item.control-picker-field{display:flex;align-items:center;gap:14px}
+.status-control-item.control-picker-field{display:flex;align-items:center;gap:14px;padding:14px 18px}
+.status-controls-panel .row.status-control-item{padding:14px 18px;border-bottom:none}
 .status-control-item.control-picker-field .picker-wrap{flex:0 0 180px;min-width:0;margin-left:auto}
 .hotspot-layout{display:grid;grid-template-columns:1fr;gap:18px}
 .hotspot-panel{background:#172033;border:1px solid rgba(56,189,248,.08);border-radius:14px;padding:16px}
@@ -182,6 +190,7 @@ body{padding:24px}
 .card-hotspot{grid-column:1 / -1;grid-row:3}
 .card-dns{grid-column:1 / -1;grid-row:4}
 .card-ota{grid-column:1 / -1;grid-row:5}
+.ota-layout{grid-template-columns:repeat(2,minmax(0,1fr))}
 .hotspot-layout{grid-template-columns:1fr 1fr}
 .dns-layout{grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch}
 .dns-editor-panel .field{flex:1 1 0;min-height:0}
@@ -195,6 +204,7 @@ body{padding:12px}
 .summary-strip{padding:12px}
 .summary-title{width:100%;padding:0}
 .summary-title h1{font-size:24px}
+.summary-title-version{font-size:9px}
 .summary-group{flex:1 1 100%}
 .summary-actions{flex:1 1 100%;justify-content:flex-start;margin-left:0}
 .summary-action{min-width:0;flex:0 0 auto}
@@ -202,6 +212,7 @@ body{padding:12px}
 .summary-pill{min-width:calc(50% - 5px)}
 .speed-offset-row-main{width:100%;justify-content:flex-start}
 .status-controls-panel{grid-template-columns:1fr}
+.ota-layout{grid-template-columns:1fr}
 .hotspot-layout{grid-template-columns:1fr}
 .dns-layout{grid-template-columns:1fr}
 .dns-stats-strip{flex-direction:column;align-items:stretch}
@@ -218,12 +229,9 @@ body{padding:12px}
 <div class="summary-strip">
   <div class="summary-title">
     <h1><span>FSD</span><span>控制器</span></h1>
+    <div class="summary-title-version" id="topHeaderVersion">--</div>
   </div>
   <div class="summary-group">
-    <div class="summary-pill">
-      <span class="summary-pill-label">FSD 状态</span>
-      <span class="summary-pill-value status-no" id="topFsdState">--</span>
-    </div>
     <div class="summary-pill">
       <span class="summary-pill-label" id="topHwModeLabel">硬件版本</span>
       <span class="summary-pill-value status-no" id="topHwMode">--</span>
@@ -237,16 +245,8 @@ body{padding:12px}
       <span class="summary-pill-value status-no" id="topUpstreamState">--</span>
     </div>
     <div class="summary-pill">
-      <span class="summary-pill-label">下游网络</span>
-      <span class="summary-pill-value status-no" id="topDownstreamState">--</span>
-    </div>
-    <div class="summary-pill">
       <span class="summary-pill-label">白/黑名单</span>
       <span class="summary-pill-value status-no" id="topDnsRules">--</span>
-    </div>
-    <div class="summary-pill">
-      <span class="summary-pill-label">道路限速</span>
-      <span class="summary-pill-value status-no" id="topRoadState">--</span>
     </div>
     <div class="summary-pill">
       <span class="summary-pill-label">芯片温度</span>
@@ -260,7 +260,7 @@ body{padding:12px}
       </span>
       <span class="toggle"><input type="checkbox" id="topFsdEnable" onchange="confirmTopFsdToggle(this)"><span class="slider"></span></span>
     </label>
-    <button class="summary-restart-btn" id="topRestartBtn" onclick="restartDevice()">重启</button>
+    <button class="summary-restart-btn" id="topRestartBtn" onclick="restartDevice()"><span>设备</span><span>重启</span></button>
   </div>
 </div>
 <div class="dashboard">
@@ -351,70 +351,70 @@ body{padding:12px}
     <div class="field">
       <label class="field-label" for="speedOffsetPct0">限速 &lt; 40</label>
       <div class="number-input-wrap">
-        <input class="text-input speed-offset-input" type="number" inputmode="numeric" min="0" max="50" step="1" id="speedOffsetPct0" onchange="saveSpeedOffsetInput(0)">
+        <input class="text-input speed-offset-input" type="number" inputmode="numeric" min="0" max="50" step="1" id="speedOffsetPct0" oninput="handleSpeedOffsetInput(0)" onchange="saveSpeedOffsetInput(0)">
         <span class="number-suffix">%</span>
       </div>
     </div>
     <div class="field">
       <label class="field-label" for="speedOffsetPct1">40 - 50</label>
       <div class="number-input-wrap">
-        <input class="text-input speed-offset-input" type="number" inputmode="numeric" min="0" max="50" step="1" id="speedOffsetPct1" onchange="saveSpeedOffsetInput(1)">
+        <input class="text-input speed-offset-input" type="number" inputmode="numeric" min="0" max="50" step="1" id="speedOffsetPct1" oninput="handleSpeedOffsetInput(1)" onchange="saveSpeedOffsetInput(1)">
         <span class="number-suffix">%</span>
       </div>
     </div>
     <div class="field">
       <label class="field-label" for="speedOffsetPct2">50 - 60</label>
       <div class="number-input-wrap">
-        <input class="text-input speed-offset-input" type="number" inputmode="numeric" min="0" max="50" step="1" id="speedOffsetPct2" onchange="saveSpeedOffsetInput(2)">
+        <input class="text-input speed-offset-input" type="number" inputmode="numeric" min="0" max="50" step="1" id="speedOffsetPct2" oninput="handleSpeedOffsetInput(2)" onchange="saveSpeedOffsetInput(2)">
         <span class="number-suffix">%</span>
       </div>
     </div>
     <div class="field">
       <label class="field-label" for="speedOffsetPct3">60 - 70</label>
       <div class="number-input-wrap">
-        <input class="text-input speed-offset-input" type="number" inputmode="numeric" min="0" max="50" step="1" id="speedOffsetPct3" onchange="saveSpeedOffsetInput(3)">
+        <input class="text-input speed-offset-input" type="number" inputmode="numeric" min="0" max="50" step="1" id="speedOffsetPct3" oninput="handleSpeedOffsetInput(3)" onchange="saveSpeedOffsetInput(3)">
         <span class="number-suffix">%</span>
       </div>
     </div>
     <div class="field">
       <label class="field-label" for="speedOffsetPct4">70 - 80</label>
       <div class="number-input-wrap">
-        <input class="text-input speed-offset-input" type="number" inputmode="numeric" min="0" max="50" step="1" id="speedOffsetPct4" onchange="saveSpeedOffsetInput(4)">
+        <input class="text-input speed-offset-input" type="number" inputmode="numeric" min="0" max="50" step="1" id="speedOffsetPct4" oninput="handleSpeedOffsetInput(4)" onchange="saveSpeedOffsetInput(4)">
         <span class="number-suffix">%</span>
       </div>
     </div>
     <div class="field">
       <label class="field-label" for="speedOffsetPct5">80 - 90</label>
       <div class="number-input-wrap">
-        <input class="text-input speed-offset-input" type="number" inputmode="numeric" min="0" max="50" step="1" id="speedOffsetPct5" onchange="saveSpeedOffsetInput(5)">
+        <input class="text-input speed-offset-input" type="number" inputmode="numeric" min="0" max="50" step="1" id="speedOffsetPct5" oninput="handleSpeedOffsetInput(5)" onchange="saveSpeedOffsetInput(5)">
         <span class="number-suffix">%</span>
       </div>
     </div>
     <div class="field">
       <label class="field-label" for="speedOffsetPct6">90 - 100</label>
       <div class="number-input-wrap">
-        <input class="text-input speed-offset-input" type="number" inputmode="numeric" min="0" max="50" step="1" id="speedOffsetPct6" onchange="saveSpeedOffsetInput(6)">
+        <input class="text-input speed-offset-input" type="number" inputmode="numeric" min="0" max="50" step="1" id="speedOffsetPct6" oninput="handleSpeedOffsetInput(6)" onchange="saveSpeedOffsetInput(6)">
         <span class="number-suffix">%</span>
       </div>
     </div>
     <div class="field">
       <label class="field-label" for="speedOffsetPct7">100 - 110</label>
       <div class="number-input-wrap">
-        <input class="text-input speed-offset-input" type="number" inputmode="numeric" min="0" max="50" step="1" id="speedOffsetPct7" onchange="saveSpeedOffsetInput(7)">
+        <input class="text-input speed-offset-input" type="number" inputmode="numeric" min="0" max="50" step="1" id="speedOffsetPct7" oninput="handleSpeedOffsetInput(7)" onchange="saveSpeedOffsetInput(7)">
         <span class="number-suffix">%</span>
       </div>
     </div>
     <div class="field">
       <label class="field-label" for="speedOffsetPct8">110 - 120</label>
       <div class="number-input-wrap">
-        <input class="text-input speed-offset-input" type="number" inputmode="numeric" min="0" max="50" step="1" id="speedOffsetPct8" onchange="saveSpeedOffsetInput(8)">
+        <input class="text-input speed-offset-input" type="number" inputmode="numeric" min="0" max="50" step="1" id="speedOffsetPct8" oninput="handleSpeedOffsetInput(8)" onchange="saveSpeedOffsetInput(8)">
         <span class="number-suffix">%</span>
       </div>
     </div>
     <div class="field">
       <label class="field-label" for="speedOffsetPct9">≥ 120</label>
       <div class="number-input-wrap">
-        <input class="text-input speed-offset-input" type="number" inputmode="numeric" min="0" max="50" step="1" id="speedOffsetPct9" onchange="saveSpeedOffsetInput(9)">
+        <input class="text-input speed-offset-input" type="number" inputmode="numeric" min="0" max="50" step="1" id="speedOffsetPct9" oninput="handleSpeedOffsetInput(9)" onchange="saveSpeedOffsetInput(9)">
         <span class="number-suffix">%</span>
       </div>
     </div>
@@ -535,23 +535,31 @@ body{padding:12px}
 
 <div class="card card-full card-ota">
   <div class="card-title">固件更新</div>
-  <div class="status-row"><span>当前固件版本</span><span id="sFirmwareVersion" class="status-ok status-text status-wide">--</span></div>
-  <div class="status-row"><span>GitHub 最新版本</span><span id="sGitHubLatestVersion" class="status-no status-text status-wide">未检查</span></div>
-  <div class="actions">
-    <button class="save-btn" type="button" id="githubOtaBtn" onclick="doGitHubOTA()">检查并更新 GitHub 最新版</button>
+  <div class="ota-layout">
+    <div class="ota-panel">
+      <div class="ota-panel-title">自动更新</div>
+      <div class="status-row"><span>当前固件版本</span><span id="sFirmwareVersion" class="status-ok status-text status-wide">--</span></div>
+      <div class="status-row"><span>GitHub 最新版本</span><span id="sGitHubLatestVersion" class="status-no status-text status-wide">未检查</span></div>
+      <div class="actions">
+        <button class="save-btn" type="button" id="githubOtaBtn" onclick="doGitHubOTA()">检查更新</button>
+      </div>
+      <div class="hint">设备默认从 GitHub Release 最新版下载 `fsd-controller.bin` 更新，无需手动填写固件地址。</div>
+      <div class="msg" id="otaGitHubMsg"></div>
+    </div>
+    <div class="ota-panel">
+      <div class="ota-panel-title">手动更新</div>
+      <div class="field-label">本地上传固件</div>
+      <div class="ota-row">
+        <label class="file-btn" for="fwFile">选择文件</label>
+        <input type="file" id="fwFile" accept=".bin" style="display:none" onchange="fileChosen(this)">
+        <span class="file-name" id="fileName">未选择文件</span>
+      </div>
+      <button class="upload-btn" id="uploadBtn" disabled onclick="doOTA()">上传固件</button>
+      <div class="progress" id="progWrap"><div class="progress-bar" id="progBar"></div></div>
+      <div class="hint">适用于本地调试或手动指定固件文件更新。</div>
+      <div class="msg" id="otaUploadMsg"></div>
+    </div>
   </div>
-  <div class="hint">设备默认从 GitHub Release 最新版下载 `fsd-controller.bin` 更新，无需手动填写固件地址。</div>
-  <div class="section-head">
-    <div class="field-label">本地上传固件</div>
-  </div>
-  <div class="ota-row">
-    <label class="file-btn" for="fwFile">选择文件</label>
-    <input type="file" id="fwFile" accept=".bin" style="display:none" onchange="fileChosen(this)">
-    <span class="file-name" id="fileName">未选择文件</span>
-  </div>
-  <button class="upload-btn" id="uploadBtn" disabled onclick="doOTA()">上传固件</button>
-  <div class="progress" id="progWrap"><div class="progress-bar" id="progBar"></div></div>
-  <div class="msg" id="otaMsg"></div>
 </div>
 
 </div>
@@ -588,6 +596,8 @@ let githubOtaCheckBusy=false;
 let githubLatestVersion='';
 let githubLatestAssetUrl='';
 let githubLatestDownloadUrl='';
+let githubUpdateAvailable=false;
+let githubOtaDownloading=false;
 let scanResults=[];
 let pendingScanResultsRender=false;
 let latestBlockedDnsRequests=[];
@@ -1019,9 +1029,9 @@ function poll(){
 
     setSummaryPill('topCanState',d.canOK?'正常':'异常',d.canOK?'status-ok':'status-err');
 
-    setSummaryPill('topFsdState',d.fsdTriggered?'已触发':'待命',d.fsdTriggered?'status-yes':'status-no');
     const hwModeText=String(d.hwMode)==='0'?'LEGACY':(String(d.hwMode)==='1'?'HW3':'HW4');
     document.getElementById('topHwModeLabel').textContent=hwModeText;
+    document.getElementById('topHeaderVersion').textContent=d.fwVersion||'--';
     const speedProfileText=String(d.speedProfile)==='0'?'保守':(String(d.speedProfile)==='1'?'默认':(String(d.speedProfile)==='2'?'适中':(String(d.speedProfile)==='3'?'激进':'最大')));
     setSummaryPill('topHwMode',speedProfileText,'status-ok');
 
@@ -1039,8 +1049,6 @@ function poll(){
     setSpeedOffsetInlineValue('speedOffsetRoadInline',roadLimitText,roadLimitValid?'status-ok':'status-no');
     setSpeedOffsetInlineValue('speedOffsetCurrentInline',offsetValid?('+'+String(d.activeSpeedOffsetPct)+'%'):'--',offsetValid?(d.activeSpeedOffsetPct>0?'status-ok':'status-no'):'status-no');
     setSpeedOffsetInlineValue('speedOffsetResultInline',resultValid?String(d.effectiveSpeedLimit):'--',resultValid?'status-ok':'status-no');
-    const roadSummaryText=roadLimitValid?(offsetValid?(String(d.roadSpeedLimit)+' / +'+String(d.activeSpeedOffsetPct)+'%'):String(d.roadSpeedLimit)):'--';
-    setSummaryPill('topRoadState',roadSummaryText,roadLimitValid?'status-ok':'status-no');
 
     let thermalClass='status-ok';
     if(d.thermalProtect)thermalClass='status-err';
@@ -1093,9 +1101,6 @@ function poll(){
     setStatusText('sNAT',d.natStatus||'--',d.natEnabled?'status-ok':(d.upstreamConnected?'status-err':'status-no'));
     setStatusText('sAP',d.apSSID||'--','status-ok');
     setStatusText('sAPIP',d.apIP||'--','status-ok');
-    const downstreamCount=Number.isFinite(d.apClients)?d.apClients:0;
-    const downstreamText=downstreamCount>0?(String(downstreamCount)+'台在线'):'待连接';
-    setSummaryPill('topDownstreamState',downstreamText,downstreamCount>0?'status-ok':'status-no');
     const dnsEnabled=!!d.dnsWhitelistEnable;
     const dnsSummaryText=dnsEnabled
       ? String(d.dnsWhitelistCount||0)+'/'+String(d.dnsBlacklistCount||0)
@@ -1114,6 +1119,16 @@ function setVal(key,val){
   fetch('/api/set?'+key+'='+val).catch(()=>{});
 }
 
+function updateSpeedOffsetInputWidth(input){
+  if(!input)return;
+  const charCount=Math.max(4,String(input.value||'').length);
+  input.style.setProperty('--input-chars',String(charCount));
+}
+
+function handleSpeedOffsetInput(index){
+  updateSpeedOffsetInputWidth(document.getElementById('speedOffsetPct'+index));
+}
+
 function syncSpeedOffsetInput(el,id,nextValue){
   if(!el)return;
   if(document.activeElement===el)return;
@@ -1122,10 +1137,12 @@ function syncSpeedOffsetInput(el,id,nextValue){
       delete speedOffsetPendingValues[id];
     }else{
       el.value=String(speedOffsetPendingValues[id]);
+      updateSpeedOffsetInputWidth(el);
       return;
     }
   }
   el.value=String(nextValue);
+  updateSpeedOffsetInputWidth(el);
 }
 
 function saveSpeedOffsetInput(index){
@@ -1138,6 +1155,7 @@ function saveSpeedOffsetInput(index){
   if(value<0)value=0;
   if(value>50)value=50;
   input.value=String(value);
+  updateSpeedOffsetInputWidth(input);
   speedOffsetPendingValues[key]=value;
   setVal(key,value);
 }
@@ -1437,15 +1455,36 @@ function clearBlockedDns(){
   });
 }
 
-function setOtaMessage(text,type){
-  const msg=document.getElementById('otaMsg');
+function setOtaMessage(id,text,type){
+  const msg=document.getElementById(id);
+  if(!msg)return;
   msg.textContent=text;
   msg.className='msg'+(type?' '+type:'');
 }
 
+function setGitHubOtaMessage(text,type){
+  setOtaMessage('otaGitHubMsg',text,type);
+}
+
+function setUploadOtaMessage(text,type){
+  setOtaMessage('otaUploadMsg',text,type);
+}
+
 function syncGitHubOtaButtons(){
   const githubBtn=document.getElementById('githubOtaBtn');
-  if(githubBtn)githubBtn.disabled=otaBusy||githubOtaCheckBusy||!githubLatestDownloadUrl;
+  if(!githubBtn)return;
+  if(githubOtaCheckBusy){
+    githubBtn.textContent='正在检查更新';
+    githubBtn.disabled=true;
+    return;
+  }
+  if(githubOtaDownloading){
+    githubBtn.textContent='正在下载新版本';
+    githubBtn.disabled=true;
+    return;
+  }
+  githubBtn.textContent=githubUpdateAvailable&&githubLatestDownloadUrl?'一键更新':'检查更新';
+  githubBtn.disabled=!!otaBusy;
 }
 
 function syncOtaUploadButton(){
@@ -1465,6 +1504,7 @@ function setOtaBusy(busy){
 
 function fileChosen(inp){
   document.getElementById('fileName').textContent=inp.files[0]?inp.files[0].name:'未选择文件';
+  setUploadOtaMessage('','');
   syncOtaUploadButton();
 }
 
@@ -1473,7 +1513,7 @@ async function checkGitHubLatest(showMessage){
   githubOtaCheckBusy=true;
   syncGitHubOtaButtons();
   if(showMessage){
-    setOtaMessage('正在检查 GitHub 最新版本...','');
+    setGitHubOtaMessage('正在检查 GitHub 最新版本...','');
   }
 
   try{
@@ -1484,6 +1524,7 @@ async function checkGitHubLatest(showMessage){
     githubLatestVersion=data.latestVersion||'';
     githubLatestAssetUrl=data.assetUrl||'';
     githubLatestDownloadUrl=data.latestDownloadUrl||data.assetUrl||'';
+    githubUpdateAvailable=!!(data.updateAvailable&&githubLatestDownloadUrl);
 
     if(data.latestVersion){
       const statusText=data.latestVersion+(data.updateAvailable?' · 可更新':' · 已最新');
@@ -1493,13 +1534,14 @@ async function checkGitHubLatest(showMessage){
     }
 
     if(showMessage){
-      setOtaMessage(data.updateAvailable?('发现 GitHub 新版本: '+data.latestVersion):'当前已经是 GitHub 最新版','ok');
+      setGitHubOtaMessage(data.updateAvailable?('发现 GitHub 新版本: '+data.latestVersion):'当前已经是 GitHub 最新版','ok');
     }
     return data;
   }catch(err){
+    githubUpdateAvailable=false;
     setWideStatusText('sGitHubLatestVersion','检查失败','status-err');
     if(showMessage){
-      setOtaMessage(err.message||'检查失败','err');
+      setGitHubOtaMessage(err.message||'检查失败','err');
     }
     return null;
   }finally{
@@ -1514,17 +1556,16 @@ function doOTA(){
   let xhr=new XMLHttpRequest();
   let prog=document.getElementById('progWrap');
   let bar=document.getElementById('progBar');
-  let msg=document.getElementById('otaMsg');
   prog.style.display='block';
   bar.style.width='0%';
-  setOtaMessage('','');
+  setUploadOtaMessage('','');
   setOtaBusy(true);
   xhr.upload.addEventListener('progress',e=>{if(e.lengthComputable)bar.style.width=Math.round(e.loaded/e.total*100)+'%';});
   xhr.onload=function(){
-    if(xhr.status===200&&xhr.responseText==='OK'){setOtaMessage('上传成功，正在重启...','ok');}
-    else{setOtaMessage('上传失败: '+(xhr.responseText||xhr.statusText||xhr.status),'err');setOtaBusy(false);}
+    if(xhr.status===200&&xhr.responseText==='OK'){setUploadOtaMessage('上传成功，正在重启...','ok');}
+    else{setUploadOtaMessage('上传失败: '+(xhr.responseText||xhr.statusText||xhr.status),'err');setOtaBusy(false);}
   };
-  xhr.onerror=function(){setOtaMessage('连接失败','err');setOtaBusy(false);};
+  xhr.onerror=function(){setUploadOtaMessage('连接失败','err');setOtaBusy(false);};
   let form=new FormData();
   form.append('firmware',file);
   xhr.open('POST','/api/ota');
@@ -1533,8 +1574,10 @@ function doOTA(){
 
 function startOnlineOTARequest(url,pendingMessage){
   document.getElementById('progWrap').style.display='none';
+  githubOtaDownloading=true;
   setOtaBusy(true);
-  setOtaMessage(pendingMessage||'正在在线下载并写入固件，请勿断电...','');
+  syncGitHubOtaButtons();
+  setGitHubOtaMessage(pendingMessage||'正在在线下载并写入固件，请勿断电...','');
 
   const body=new URLSearchParams();
   body.set('url',url);
@@ -1546,25 +1589,29 @@ function startOnlineOTARequest(url,pendingMessage){
   }).then(async r=>{
     const text=await r.text();
     if(!r.ok)throw new Error(text||'在线更新失败');
-    setOtaMessage('在线更新完成，正在重启...','ok');
+    setGitHubOtaMessage('在线更新完成，正在重启...','ok');
   }).catch(err=>{
+    githubOtaDownloading=false;
     setOtaBusy(false);
-    setOtaMessage(err.message||'在线更新失败','err');
+    setGitHubOtaMessage(err.message||'在线更新失败','err');
     poll();
   });
 }
 
 async function doGitHubOTA(){
-  const data=await checkGitHubLatest(true);
-  if(!data)return;
-  if(!data.updateAvailable){
-    setOtaMessage('当前已经是 GitHub 最新版','ok');
+  if(!githubUpdateAvailable){
+    const data=await checkGitHubLatest(true);
+    if(!data)return;
+    if(!data.updateAvailable){
+      setGitHubOtaMessage('当前已经是 GitHub 最新版','ok');
+      return;
+    }
     return;
   }
 
-  const targetUrl=data.latestDownloadUrl||data.assetUrl;
+  const targetUrl=githubLatestDownloadUrl||githubLatestAssetUrl;
   if(!targetUrl){
-    setOtaMessage('GitHub 最新版缺少固件下载地址','err');
+    setGitHubOtaMessage('GitHub 最新版缺少固件下载地址','err');
     return;
   }
 
@@ -1586,10 +1633,9 @@ async function restartDevice(){
   });
   if(!confirmed)return;
   const buttons=[document.getElementById('topRestartBtn')].filter(Boolean);
-  const msg=document.getElementById('otaMsg');
   buttons.forEach(btn=>{btn.disabled=true;});
-  msg.textContent='正在重启设备...';
-  msg.className='msg ok';
+  setGitHubOtaMessage('正在重启设备...','ok');
+  setUploadOtaMessage('','');
   fetch('/api/restart',{method:'POST'}).catch(()=>{}).finally(()=>{
     setTimeout(()=>{buttons.forEach(btn=>{btn.disabled=false;});},5000);
   });
@@ -1603,7 +1649,7 @@ document.addEventListener('keydown',event=>{
 
 setOtaBusy(false);
 syncGitHubOtaButtons();
-checkGitHubLatest(false);
+speedOffsetBucketIds.forEach(id=>updateSpeedOffsetInputWidth(document.getElementById(id)));
 setInterval(poll,1000);
 poll();
 </script>

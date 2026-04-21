@@ -42,6 +42,51 @@ def extract_embedded_html() -> str:
     return match.group(1)
 
 
+def inject_preview_badge(html: str) -> str:
+    html = html.replace("<title>FSD 控制器</title>", "<title>[PREVIEW] FSD 控制器</title>", 1)
+
+    badge_markup = """
+<style>
+#preview-badge{
+  position:fixed;
+  right:14px;
+  bottom:14px;
+  z-index:99999;
+  pointer-events:none;
+  padding:10px 12px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,.24);
+  background:linear-gradient(135deg,#f97316,#ef4444);
+  color:#fff;
+  box-shadow:0 12px 28px rgba(0,0,0,.35);
+  font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  text-align:right;
+}
+#preview-badge strong{
+  display:block;
+  font-size:12px;
+  line-height:1.1;
+  letter-spacing:.12em;
+}
+#preview-badge span{
+  display:block;
+  margin-top:4px;
+  font-size:10px;
+  line-height:1.2;
+  opacity:.92;
+}
+</style>
+<div id="preview-badge" aria-label="Preview mode badge">
+  <strong>PREVIEW / MOCK</strong>
+  <span>127.0.0.1 local only</span>
+</div>
+"""
+
+    if "</body>" in html:
+        return html.replace("</body>", badge_markup + "\n</body>", 1)
+    return html + badge_markup
+
+
 def first_param(params: dict[str, list[str]], key: str, default: str = "") -> str:
     values = params.get(key)
     return values[0] if values else default
@@ -494,7 +539,7 @@ class PreviewRequestHandler(BaseHTTPRequestHandler):
 
         if parsed.path in {"/", "/index.html"}:
             try:
-                html = extract_embedded_html()
+                html = inject_preview_badge(extract_embedded_html())
             except RuntimeError as exc:
                 self.send_text(HTTPStatus.INTERNAL_SERVER_ERROR, str(exc))
                 return
