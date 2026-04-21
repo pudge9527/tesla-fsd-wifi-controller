@@ -26,7 +26,7 @@
 #include "web_ui.h"
 
 #ifndef APP_VERSION
-#define APP_VERSION "v1.0.0"
+#define APP_VERSION "v1.0.1"
 #endif
 
 static const char* GITHUB_REPO = "pudge9527/tesla-fsd-wifi-controller";

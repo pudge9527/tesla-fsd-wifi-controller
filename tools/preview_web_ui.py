@@ -178,7 +178,7 @@ class PreviewState:
             {"domain": "logs.netflix.com", "count": 13, "seconds_ago": 236},
             {"domain": "browser.pipe.aria.microsoft.com", "count": 17, "seconds_ago": 264},
         ]
-        self.firmware_version = "v1.0.0"
+        self.firmware_version = "v1.0.1"
         self.github_latest_version = "v1.0.1"
         self.ota_url = self.github_latest_download_url()
 
