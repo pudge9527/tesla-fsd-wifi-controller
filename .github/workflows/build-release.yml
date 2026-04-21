@@ -2,11 +2,8 @@ name: Build And Release Firmware
 
 on:
   push:
-    branches:
-      - "**"
     tags:
       - "v*"
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -19,6 +16,8 @@ jobs:
   build:
     name: Build Firmware
     runs-on: ubuntu-latest
+    env:
+      APP_VERSION: ${{ github.ref_name }}
 
     steps:
       - name: Checkout
