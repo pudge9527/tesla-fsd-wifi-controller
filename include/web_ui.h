@@ -597,6 +597,7 @@ let latestFsdEnableState=true;
 let confirmResolver=null;
 let confirmReturnFocus=null;
 const speedOffsetBucketIds=['speedOffsetPct0','speedOffsetPct1','speedOffsetPct2','speedOffsetPct3','speedOffsetPct4','speedOffsetPct5','speedOffsetPct6','speedOffsetPct7','speedOffsetPct8','speedOffsetPct9'];
+const speedOffsetPendingValues={};
 
 function markDnsDirty(){
   dnsDirty=true;
@@ -1066,10 +1067,13 @@ function poll(){
     const isHw3=String(d.hwMode)==='1';
     document.getElementById('speedOffsetEnable').disabled=!isHw3;
     const bucketValues=Array.isArray(d.speedOffsetBuckets)?d.speedOffsetBuckets:[];
+    if(!isHw3){
+      Object.keys(speedOffsetPendingValues).forEach(key=>delete speedOffsetPendingValues[key]);
+    }
     speedOffsetBucketIds.forEach((id,index)=>{
       const el=document.getElementById(id);
       if(!el)return;
-      el.value=String(Number.isFinite(bucketValues[index])?bucketValues[index]:0);
+      syncSpeedOffsetInput(el,id,Number.isFinite(bucketValues[index])?bucketValues[index]:0);
       el.disabled=!isHw3;
     });
     document.querySelectorAll('.picker-native').forEach(select=>syncPickerButton(select.id));
@@ -1110,8 +1114,23 @@ function setVal(key,val){
   fetch('/api/set?'+key+'='+val).catch(()=>{});
 }
 
+function syncSpeedOffsetInput(el,id,nextValue){
+  if(!el)return;
+  if(document.activeElement===el)return;
+  if(Object.prototype.hasOwnProperty.call(speedOffsetPendingValues,id)){
+    if(speedOffsetPendingValues[id]===nextValue){
+      delete speedOffsetPendingValues[id];
+    }else{
+      el.value=String(speedOffsetPendingValues[id]);
+      return;
+    }
+  }
+  el.value=String(nextValue);
+}
+
 function saveSpeedOffsetInput(index){
-  const input=document.getElementById('speedOffsetPct'+index);
+  const key='speedOffsetPct'+index;
+  const input=document.getElementById(key);
   if(!input)return;
   let value=Number(input.value);
   if(!Number.isFinite(value))value=0;
@@ -1119,7 +1138,8 @@ function saveSpeedOffsetInput(index){
   if(value<0)value=0;
   if(value>50)value=50;
   input.value=String(value);
-  setVal('speedOffsetPct'+index,value);
+  speedOffsetPendingValues[key]=value;
+  setVal(key,value);
 }
 
 async function confirmTopFsdToggle(input){
