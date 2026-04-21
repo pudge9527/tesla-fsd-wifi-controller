@@ -6,16 +6,35 @@
 #include "can_helpers.h"
 
 // ── Runtime-configurable state (shared with web server) ──
+static constexpr uint8_t SPEED_OFFSET_BUCKET_COUNT = 10;
+
+inline int getSpeedOffsetBucketIndex(int roadLimit) {
+    if (roadLimit < 0) return -1;
+    if (roadLimit < 40) return 0;
+    if (roadLimit < 50) return 1;
+    if (roadLimit < 60) return 2;
+    if (roadLimit < 70) return 3;
+    if (roadLimit < 80) return 4;
+    if (roadLimit < 90) return 5;
+    if (roadLimit < 100) return 6;
+    if (roadLimit < 110) return 7;
+    if (roadLimit < 120) return 8;
+    return 9;
+}
+
 struct FSDConfig {
     volatile bool     fsdEnable           = true;
     volatile uint8_t  hwMode              = 2;       // 0=LEGACY, 1=HW3, 2=HW4
     volatile uint8_t  speedProfile        = 1;       // 0-4
     volatile bool     profileModeAuto     = true;    // true=auto from stalk, false=manual
     volatile bool     speedOffsetEnable   = false;   // HW3 only, inject configured offset
-    volatile uint8_t  speedOffsetPercent  = 0;       // 0-50 (% over limit)
+    volatile uint8_t  speedOffsetBuckets[SPEED_OFFSET_BUCKET_COUNT] = {};
     volatile bool     isaChimeSuppress    = false;
     volatile bool     emergencyDetection  = true;
     volatile bool     chinaMode          = false;  // CN firmware: bypass isFSDSelectedInUI check
+    volatile int      roadSpeedLimit      = -1;     // decoded from CAN 921 fusedSpeedLimit
+    volatile int      visionSpeedLimit    = -1;
+    volatile uint32_t roadSpeedLimitLastUpdate = 0;
 
     // Stats
     volatile uint32_t rxCount       = 0;
@@ -109,9 +128,14 @@ static void handleHW3(CanFrame& frame, CanDriver& driver) {
             else cfg.errorCount++;
         }
         if (index == 2 && cfg.fsdTriggered && cfg.fsdEnable) {
-            int speedOffset = cfg.speedOffsetEnable
-                ? static_cast<int>(cfg.speedOffsetPercent) * 4
-                : std::max(std::min(((int)((frame.data[3] >> 1) & 0x3F) - 30) * 5, 100), 0);
+            int speedOffset = 0;
+            if (cfg.speedOffsetEnable) {
+                int bucketIndex = getSpeedOffsetBucketIndex(cfg.roadSpeedLimit);
+                uint8_t pct = bucketIndex >= 0 ? cfg.speedOffsetBuckets[bucketIndex] : 0;
+                speedOffset = static_cast<int>(pct) * 4;
+            } else {
+                speedOffset = std::max(std::min(((int)((frame.data[3] >> 1) & 0x3F) - 30) * 5, 100), 0);
+            }
             frame.data[0] &= ~(0b11000000);
             frame.data[1] &= ~(0b00111111);
             frame.data[0] |= (speedOffset & 0x03) << 6;

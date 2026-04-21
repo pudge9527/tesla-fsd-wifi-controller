@@ -20,9 +20,17 @@
 #include "can_frame_types.h"
 #include "dns_whitelist.h"
 #include "dns_ip_blocker.h"
+#include "ota_http.h"
 #include "drivers/twai_driver.h"
 #include "handlers.h"
 #include "web_ui.h"
+
+#ifndef APP_VERSION
+#define APP_VERSION "v1.0.0"
+#endif
+
+static const char* GITHUB_REPO = "pudge9527/tesla-fsd-wifi-controller";
+static const char* GITHUB_RELEASE_ASSET_NAME = "fsd-controller.bin";
 
 // ── WiFi AP config ──
 static const char* DEFAULT_AP_SSID = "FSD-Controller";
@@ -37,6 +45,7 @@ static constexpr uint32_t UPSTREAM_RETRY_THROTTLED_MS = 60000;
 static constexpr uint8_t MAX_UPSTREAM_NETWORKS = 10;
 static constexpr uint8_t MAX_SCAN_RESULTS = 12;
 static constexpr uint32_t THERMAL_SAMPLE_MS = 5000;
+static constexpr size_t MAX_OTA_URL_LEN = 256;
 static constexpr float CHIP_TEMP_WARN_C = 65.0f;
 static constexpr float CHIP_TEMP_THROTTLE_C = 75.0f;
 static constexpr float CHIP_TEMP_PROTECT_C = 80.0f;
@@ -51,6 +60,7 @@ static AsyncWebServer server(80);
 static Preferences    prefs;
 static DNSWhitelistServer dnsServer;
 static volatile bool  otaPendingRestart = false;
+static volatile bool  otaOnlineInProgress = false;
 static bool           natEnabled = false;
 
 struct LocalAPConfig {
@@ -87,6 +97,12 @@ static volatile bool upstreamScanInProgress = false;
 static LocalAPConfig apCfg;
 
 static DNSFilterConfig dnsCfg;
+
+struct OnlineOTAConfig {
+    char url[MAX_OTA_URL_LEN + 1] = {};
+};
+
+static OnlineOTAConfig otaCfg;
 
 enum class ThermalLevel : uint8_t {
     Normal = 0,
@@ -130,6 +146,31 @@ String jsonEscape(const String& value) {
         }
     }
     return escaped;
+}
+
+String getGitHubLatestDownloadUrl() {
+    return "https://github.com/" + String(GITHUB_REPO) + "/releases/latest/download/" + String(GITHUB_RELEASE_ASSET_NAME);
+}
+
+bool normalizeOTAUrl(const String& input, bool allowEmpty, String& normalized, String& error) {
+    normalized = input;
+    normalized.trim();
+
+    if (normalized.isEmpty()) {
+        if (allowEmpty) return true;
+        error = "在线固件地址不能为空";
+        return false;
+    }
+    if (normalized.length() > MAX_OTA_URL_LEN) {
+        error = "在线固件地址过长";
+        return false;
+    }
+    if (!(normalized.startsWith("http://") || normalized.startsWith("https://"))) {
+        error = "在线固件地址必须以 http:// 或 https:// 开头";
+        return false;
+    }
+
+    return true;
 }
 
 bool isReservedUpstreamSSID(const String& ssid) {
@@ -641,10 +682,14 @@ void loadConfig() {
     cfg.speedProfile       = prefs.getUChar("spPro", 1);
     cfg.profileModeAuto    = prefs.getBool("proAuto", true);
     cfg.speedOffsetEnable  = prefs.getBool("spOffEn", false);
-    cfg.speedOffsetPercent = prefs.getUChar("spOffPct", 0);
     cfg.isaChimeSuppress   = prefs.getBool("isaChm", false);
     cfg.emergencyDetection = prefs.getBool("emDet", true);
     cfg.chinaMode          = prefs.getBool("cnMode", false);
+    for (uint8_t i = 0; i < SPEED_OFFSET_BUCKET_COUNT; ++i) {
+        char key[10];
+        snprintf(key, sizeof(key), "spBk%u", i);
+        cfg.speedOffsetBuckets[i] = prefs.getUChar(key, 0);
+    }
     copyStringToBuffer(apCfg.ssid, sizeof(apCfg.ssid), prefs.getString("apSsid", DEFAULT_AP_SSID));
     copyStringToBuffer(apCfg.pass, sizeof(apCfg.pass), prefs.getString("apPass", DEFAULT_AP_PASS));
     clearSavedUpstreamNetworks();
@@ -665,12 +710,15 @@ void loadConfig() {
     dnsCfg.enabled         = prefs.getBool("dnsEn", false);
     copyStringToBuffer(dnsCfg.allowlist, sizeof(dnsCfg.allowlist), prefs.getString("dnsList", ""));
     copyStringToBuffer(dnsCfg.blocklist, sizeof(dnsCfg.blocklist), prefs.getString("dnsBlk", ""));
+    copyStringToBuffer(otaCfg.url, sizeof(otaCfg.url), prefs.getString("otaUrl", ""));
     prefs.end();
 
     // Clamp values
     if (cfg.hwMode > 2)       cfg.hwMode = 2;
     if (cfg.speedProfile > 4) cfg.speedProfile = 1;
-    if (cfg.speedOffsetPercent > 50) cfg.speedOffsetPercent = 50;
+    for (uint8_t i = 0; i < SPEED_OFFSET_BUCKET_COUNT; ++i) {
+        if (cfg.speedOffsetBuckets[i] > 50) cfg.speedOffsetBuckets[i] = 50;
+    }
     if (apCfg.ssid[0] == '\0') {
         copyStringToBuffer(apCfg.ssid, sizeof(apCfg.ssid), String(DEFAULT_AP_SSID));
     }
@@ -687,7 +735,11 @@ void saveConfig() {
     prefs.putUChar("spPro",  cfg.speedProfile);
     prefs.putBool("proAuto", cfg.profileModeAuto);
     prefs.putBool("spOffEn", cfg.speedOffsetEnable);
-    prefs.putUChar("spOffPct", cfg.speedOffsetPercent);
+    for (uint8_t i = 0; i < SPEED_OFFSET_BUCKET_COUNT; ++i) {
+        char key[10];
+        snprintf(key, sizeof(key), "spBk%u", i);
+        prefs.putUChar(key, cfg.speedOffsetBuckets[i]);
+    }
     prefs.putBool("isaChm",  cfg.isaChimeSuppress);
     prefs.putBool("emDet",   cfg.emergencyDetection);
     prefs.putBool("cnMode",  cfg.chinaMode);
@@ -711,7 +763,15 @@ void saveConfig() {
     prefs.putBool("dnsEn",   dnsCfg.enabled);
     prefs.putString("dnsList", dnsCfg.allowlist);
     prefs.putString("dnsBlk", dnsCfg.blocklist);
+    prefs.putString("otaUrl", otaCfg.url);
     prefs.end();
+}
+
+int getActiveSpeedOffsetPercent() {
+    if (!cfg.speedOffsetEnable) return -1;
+    int bucketIndex = getSpeedOffsetBucketIndex(cfg.roadSpeedLimit);
+    if (bucketIndex < 0 || bucketIndex >= SPEED_OFFSET_BUCKET_COUNT) return -1;
+    return cfg.speedOffsetBuckets[bucketIndex];
 }
 
 String buildStatusJson() {
@@ -730,15 +790,24 @@ String buildStatusJson() {
     String upstreamSignal = upstreamConnected ? jsonEscape(String(getUpstreamSignalText(upstreamRSSI))) : "";
     String dnsAllowlist = jsonEscape(String(dnsCfg.allowlist));
     String dnsBlocklist = jsonEscape(String(dnsCfg.blocklist));
+    String otaUrl = jsonEscape(String(otaCfg.url));
+    String githubRepo = jsonEscape(String(GITHUB_REPO));
+    String githubAssetName = jsonEscape(String(GITHUB_RELEASE_ASSET_NAME));
+    String githubLatestDownloadUrl = jsonEscape(getGitHubLatestDownloadUrl());
     String natStatus = jsonEscape(String(getNATStatusText()));
     String thermalStatusText = jsonEscape(String(getThermalStatusText()));
+    String fwVersion = jsonEscape(String(APP_VERSION));
     String savedNetworks = buildSavedUpstreamNetworksJson();
     uint32_t dnsBlockedCount = 0;
     size_t dnsBlockedRecentCount = 0;
     String dnsBlockedRequests = buildBlockedDnsRequestsJson(dnsBlockedCount, dnsBlockedRecentCount);
+    int activeSpeedOffsetPct = getActiveSpeedOffsetPercent();
+    float effectiveSpeedLimit = (cfg.roadSpeedLimit >= 0 && activeSpeedOffsetPct >= 0)
+        ? static_cast<float>(cfg.roadSpeedLimit) * (1.0f + static_cast<float>(activeSpeedOffsetPct) / 100.0f)
+        : NAN;
     String json;
 
-    json.reserve(7000);
+    json.reserve(7300);
     json += "{";
     json += "\"rx\":";
     json += String((unsigned)cfg.rxCount);
@@ -752,6 +821,16 @@ String buildStatusJson() {
     json += std::isfinite(thermalStatus.currentC) ? String(thermalStatus.currentC, 1) : "null";
     json += ",\"chipTempAvgC\":";
     json += std::isfinite(thermalStatus.averageC) ? String(thermalStatus.averageC, 1) : "null";
+    json += ",\"roadSpeedLimit\":";
+    json += cfg.roadSpeedLimit >= 0 ? String(cfg.roadSpeedLimit) : "null";
+    json += ",\"visionSpeedLimit\":";
+    json += cfg.visionSpeedLimit >= 0 ? String(cfg.visionSpeedLimit) : "null";
+    json += ",\"roadSpeedLimitAgeMs\":";
+    json += cfg.roadSpeedLimitLastUpdate > 0 ? String((unsigned)(millis() - cfg.roadSpeedLimitLastUpdate)) : "null";
+    json += ",\"activeSpeedOffsetPct\":";
+    json += activeSpeedOffsetPct >= 0 ? String(activeSpeedOffsetPct) : "null";
+    json += ",\"effectiveSpeedLimit\":";
+    json += std::isfinite(effectiveSpeedLimit) ? String(effectiveSpeedLimit, 1) : "null";
     json += ",\"thermalStatus\":\"";
     json += thermalStatusText;
     json += "\",\"thermalProtect\":";
@@ -770,8 +849,12 @@ String buildStatusJson() {
     json += String((int)cfg.profileModeAuto);
     json += ",\"speedOffsetEnable\":";
     json += String((int)cfg.speedOffsetEnable);
-    json += ",\"speedOffsetPct\":";
-    json += String((int)cfg.speedOffsetPercent);
+    json += ",\"speedOffsetBuckets\":[";
+    for (uint8_t i = 0; i < SPEED_OFFSET_BUCKET_COUNT; ++i) {
+        if (i > 0) json += ",";
+        json += String((int)cfg.speedOffsetBuckets[i]);
+    }
+    json += "]";
     json += ",\"isaChime\":";
     json += String((int)cfg.isaChimeSuppress);
     json += ",\"emergencyDet\":";
@@ -811,6 +894,16 @@ String buildStatusJson() {
     json += apSSID;
     json += "\",\"apIP\":\"";
     json += jsonEscape(apIP);
+    json += "\",\"fwVersion\":\"";
+    json += fwVersion;
+    json += "\",\"otaUrl\":\"";
+    json += otaUrl;
+    json += "\",\"githubRepo\":\"";
+    json += githubRepo;
+    json += "\",\"githubAssetName\":\"";
+    json += githubAssetName;
+    json += "\",\"githubLatestDownloadUrl\":\"";
+    json += githubLatestDownloadUrl;
     json += "\",\"dnsWhitelistEnable\":";
     json += String((int)dnsCfg.enabled);
     json += ",\"dnsWhitelistCount\":";
@@ -843,7 +936,19 @@ String buildStatusJson() {
 void setupWebServer() {
     // Serve UI
     server.on("/", HTTP_GET, [](AsyncWebServerRequest* req) {
-        req->send(200, "text/html", INDEX_HTML);
+        const size_t htmlLen = strlen_P(INDEX_HTML);
+        const String remoteIp = req->client() ? req->client()->remoteIP().toString() : String("unknown");
+        Serial.printf("HTTP GET / from %s, htmlLen=%u\n", remoteIp.c_str(), static_cast<unsigned>(htmlLen));
+
+        AsyncWebServerResponse* response = req->beginResponse_P(200, "text/html", INDEX_HTML);
+        if (response == nullptr) {
+            Serial.println("HTTP GET / failed: beginResponse_P returned null");
+            req->send(500, "text/plain", "UI response allocation failed");
+            return;
+        }
+
+        req->send(response);
+        Serial.println("HTTP GET / response queued");
     });
 
     server.on("/api/status", HTTP_GET, [](AsyncWebServerRequest* req) {
@@ -965,12 +1070,16 @@ void setupWebServer() {
             cfg.speedOffsetEnable = req->getParam("speedOffsetEnable")->value().toInt() != 0;
             changed = true;
         }
-        if (req->hasParam("speedOffsetPct")) {
-            int value = req->getParam("speedOffsetPct")->value().toInt();
-            if (value < 0) value = 0;
-            if (value > 50) value = 50;
-            cfg.speedOffsetPercent = static_cast<uint8_t>(value);
-            changed = true;
+        for (uint8_t i = 0; i < SPEED_OFFSET_BUCKET_COUNT; ++i) {
+            char key[18];
+            snprintf(key, sizeof(key), "speedOffsetPct%u", i);
+            if (req->hasParam(key)) {
+                int value = req->getParam(key)->value().toInt();
+                if (value < 0) value = 0;
+                if (value > 50) value = 50;
+                cfg.speedOffsetBuckets[i] = static_cast<uint8_t>(value);
+                changed = true;
+            }
         }
         if (req->hasParam("isaChime")) {
             cfg.isaChimeSuppress = req->getParam("isaChime")->value().toInt() != 0;
@@ -1030,6 +1139,18 @@ void setupWebServer() {
                 changed = true;
             }
         }
+        if (req->hasParam("otaUrl")) {
+            String normalized;
+            String error;
+            if (!normalizeOTAUrl(req->getParam("otaUrl")->value(), true, normalized, error)) {
+                req->send(400, "text/plain", error);
+                return;
+            }
+            if (normalized != String(otaCfg.url)) {
+                copyStringToBuffer(otaCfg.url, sizeof(otaCfg.url), normalized);
+                changed = true;
+            }
+        }
 
         if (changed) saveConfig();
         if (apChanged) requestLocalAPApply();
@@ -1066,6 +1187,76 @@ void setupWebServer() {
         }
     );
 
+    server.on("/api/ota/github/latest", HTTP_GET, [](AsyncWebServerRequest* req) {
+        String latestVersion;
+        String assetUrl;
+        String latestDownloadUrl;
+        String error;
+
+        if (!fetchLatestGitHubRelease(String(GITHUB_REPO), String(GITHUB_RELEASE_ASSET_NAME),
+                                      latestVersion, assetUrl, latestDownloadUrl, error)) {
+            req->send(502, "text/plain", error);
+            return;
+        }
+
+        String json = "{";
+        json += "\"repo\":\"";
+        json += jsonEscape(String(GITHUB_REPO));
+        json += "\",\"assetName\":\"";
+        json += jsonEscape(String(GITHUB_RELEASE_ASSET_NAME));
+        json += "\",\"currentVersion\":\"";
+        json += jsonEscape(String(APP_VERSION));
+        json += "\",\"latestVersion\":\"";
+        json += jsonEscape(latestVersion);
+        json += "\",\"assetUrl\":\"";
+        json += jsonEscape(assetUrl);
+        json += "\",\"latestDownloadUrl\":\"";
+        json += jsonEscape(latestDownloadUrl);
+        json += "\",\"updateAvailable\":";
+        json += (latestVersion != String(APP_VERSION) ? "true" : "false");
+        json += "}";
+
+        req->send(200, "application/json", json);
+    });
+
+    server.on("/api/ota/online", HTTP_POST, [](AsyncWebServerRequest* req) {
+        if (otaOnlineInProgress) {
+            req->send(409, "text/plain", "在线更新进行中，请稍后再试");
+            return;
+        }
+        if (!req->hasParam("url", true)) {
+            req->send(400, "text/plain", "缺少在线固件地址");
+            return;
+        }
+
+        String normalized;
+        String error;
+        if (!normalizeOTAUrl(req->getParam("url", true)->value(), false, normalized, error)) {
+            req->send(400, "text/plain", error);
+            return;
+        }
+
+        copyStringToBuffer(otaCfg.url, sizeof(otaCfg.url), normalized);
+        saveConfig();
+
+        otaOnlineInProgress = true;
+        bool ok = performOnlineOTA(normalized, error);
+        otaOnlineInProgress = false;
+
+        if (!ok) {
+            req->send(502, "text/plain", error);
+            return;
+        }
+
+        req->send(200, "text/plain", "OK");
+        otaPendingRestart = true;
+    });
+
+    server.on("/api/restart", HTTP_POST, [](AsyncWebServerRequest* req) {
+        req->send(200, "text/plain", "OK");
+        otaPendingRestart = true;
+    });
+
     server.begin();
     Serial.println("Web server started");
 }
@@ -1081,6 +1272,13 @@ void canTask(void* param) {
         while (canDriver.read(frame)) {
             cfg.canOK = true;
             activity = true;
+            if (frame.id == 921 && frame.dlc >= 3) {
+                uint8_t fusedRaw = frame.data[1] & 0x1F;
+                uint8_t visionRaw = frame.data[2] & 0x1F;
+                cfg.roadSpeedLimit = (fusedRaw == 0 || fusedRaw == 31) ? -1 : fusedRaw * 5;
+                cfg.visionSpeedLimit = (visionRaw == 0 || visionRaw == 31) ? -1 : visionRaw * 5;
+                cfg.roadSpeedLimitLastUpdate = millis();
+            }
             handleMessage(frame, canDriver);
         }
         // LED: on during activity, off when idle
