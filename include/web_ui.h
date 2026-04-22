@@ -125,8 +125,9 @@ select:disabled,.text-input:disabled,.toggle input:disabled+.slider{opacity:.45;
 .tag.busy{background:rgba(56,189,248,.16);color:#7dd3fc}
 .tag.warn{background:rgba(234,179,8,.16);color:#fde68a}
 .empty-box{border:1px dashed #334155;border-radius:10px;padding:12px;text-align:center;font-size:12px;color:#64748b}
-.bucket-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:12px;margin-top:10px}
+.bucket-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(80px,1fr));gap:12px;margin-top:10px}
 .bucket-grid .field{padding:0;border-top:none}
+.bucket-grid .field-label{text-align:center}
 .number-input-wrap{position:relative;display:flex;align-items:center;width:100%;min-width:80px;max-width:100%}
 .speed-offset-input{width:100%;min-width:80px;max-width:100%;padding-right:28px}
 .number-suffix{position:absolute;top:50%;right:12px;transform:translateY(-50%);font-size:12px;color:#64748b;pointer-events:none}
