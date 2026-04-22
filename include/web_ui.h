@@ -543,7 +543,7 @@ body{padding:12px}
       <div class="actions">
         <button class="save-btn" type="button" id="githubOtaBtn" onclick="doGitHubOTA()">检查更新</button>
       </div>
-      <div class="hint">设备默认从 GitHub Release 最新版下载 `fsd-controller.bin` 更新，无需手动填写固件地址。</div>
+      <div class="hint">设备默认从 GitHub Release 下载当前板型对应的 OTA 固件包更新，无需手动填写固件地址。</div>
       <div class="msg" id="otaGitHubMsg"></div>
     </div>
     <div class="ota-panel">

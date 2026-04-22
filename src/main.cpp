@@ -15,6 +15,7 @@
 #include <Update.h>
 #include <Preferences.h>
 
+#include "soc/soc_caps.h"
 #include "lwip/lwip_napt.h"
 
 #include "can_frame_types.h"
@@ -28,9 +29,12 @@
 #ifndef APP_VERSION
 #define APP_VERSION "0.0.0-dev"
 #endif
+#ifndef OTA_RELEASE_ASSET_NAME
+#define OTA_RELEASE_ASSET_NAME "fsd-controller-esp32-ota.bin"
+#endif
 
 static const char* GITHUB_REPO = "pudge9527/tesla-fsd-wifi-controller";
-static const char* GITHUB_RELEASE_ASSET_NAME = "fsd-controller.bin";
+static const char* GITHUB_RELEASE_ASSET_NAME = OTA_RELEASE_ASSET_NAME;
 
 // ── WiFi AP config ──
 static const char* DEFAULT_AP_SSID = "FSD-Controller";
@@ -1295,6 +1299,18 @@ void dnsTask(void* param) {
     }
 }
 
+static BaseType_t createWorkerTask(TaskFunction_t taskFn, const char* name,
+                                   uint32_t stackWords, void* param,
+                                   UBaseType_t priority, TaskHandle_t* handle,
+                                   BaseType_t preferredCore) {
+#if SOC_CPU_CORES_NUM > 1
+    return xTaskCreatePinnedToCore(taskFn, name, stackWords, param, priority, handle, preferredCore);
+#else
+    (void)preferredCore;
+    return xTaskCreate(taskFn, name, stackWords, param, priority, handle);
+#endif
+}
+
 // ═══════════════════════════════════════════
 //  Arduino setup / loop
 // ═══════════════════════════════════════════
@@ -1329,8 +1345,8 @@ void setup() {
     dnsServer.begin();
 
     setupWebServer();
-    xTaskCreatePinnedToCore(dnsTask, "DNS", 4096, NULL, 1, NULL, 0);
-    xTaskCreatePinnedToCore(canTask, "CAN", 8192, NULL, 2, NULL, 1);
+    createWorkerTask(dnsTask, "DNS", 4096, NULL, 1, NULL, 0);
+    createWorkerTask(canTask, "CAN", 8192, NULL, 2, NULL, 1);
 }
 
 void loop() {

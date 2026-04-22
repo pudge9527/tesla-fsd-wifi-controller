@@ -8,14 +8,39 @@ on:
 permissions:
   contents: read
 
-env:
-  PIO_ENV: esp32
-  FIRMWARE_NAME: fsd-controller.bin
-
 jobs:
   build:
     name: Build Firmware
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pio_env: esp32
+            firmware_name: fsd-controller-esp32.bin
+            ota_name: fsd-controller-esp32-ota.bin
+            full_name: fsd-controller-esp32-full.bin
+            flash_size: 4MB
+          - pio_env: esp32c3
+            firmware_name: fsd-controller-esp32c3.bin
+            ota_name: fsd-controller-esp32c3-ota.bin
+            full_name: fsd-controller-esp32c3-full.bin
+            flash_size: 4MB
+          - pio_env: esp32s3
+            firmware_name: fsd-controller-esp32s3.bin
+            ota_name: fsd-controller-esp32s3-ota.bin
+            full_name: fsd-controller-esp32s3-full.bin
+            flash_size: 8MB
+          - pio_env: esp32c6
+            firmware_name: fsd-controller-esp32c6.bin
+            ota_name: fsd-controller-esp32c6-ota.bin
+            full_name: fsd-controller-esp32c6-full.bin
+            flash_size: 8MB
+          - pio_env: esp32c5
+            firmware_name: fsd-controller-esp32c5.bin
+            ota_name: fsd-controller-esp32c5-ota.bin
+            full_name: fsd-controller-esp32c5-full.bin
+            flash_size: 16MB
     env:
       APP_VERSION: ${{ github.ref_name }}
 
@@ -32,18 +57,26 @@ jobs:
         run: pip install platformio
 
       - name: Build
-        run: pio run -e "${PIO_ENV}"
+        run: pio run -e "${{ matrix.pio_env }}"
 
       - name: Prepare Artifact
         run: |
           mkdir -p dist
-          cp ".pio/build/${PIO_ENV}/${FIRMWARE_NAME}" "dist/${FIRMWARE_NAME}"
+          python3 tools/package_firmware.py \
+            --build-dir ".pio/build/${{ matrix.pio_env }}" \
+            --app-bin "${{ matrix.firmware_name }}" \
+            --ota-name "${{ matrix.ota_name }}" \
+            --full-name "${{ matrix.full_name }}" \
+            --flash-size "${{ matrix.flash_size }}" \
+            --output-dir dist
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-${{ github.sha }}
-          path: dist/${{ env.FIRMWARE_NAME }}
+          name: firmware-${{ matrix.pio_env }}-${{ github.sha }}
+          path: |
+            dist/${{ matrix.ota_name }}
+            dist/${{ matrix.full_name }}
           if-no-files-found: error
 
   release:
@@ -58,11 +91,22 @@ jobs:
       - name: Download Build Artifact
         uses: actions/download-artifact@v4
         with:
-          name: firmware-${{ github.sha }}
+          pattern: firmware-*-${{ github.sha }}
           path: dist
+          merge-multiple: true
 
       - name: Create Or Update Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/${{ env.FIRMWARE_NAME }}
+          files: |
+            dist/fsd-controller-esp32-ota.bin
+            dist/fsd-controller-esp32-full.bin
+            dist/fsd-controller-esp32c3-ota.bin
+            dist/fsd-controller-esp32c3-full.bin
+            dist/fsd-controller-esp32s3-ota.bin
+            dist/fsd-controller-esp32s3-full.bin
+            dist/fsd-controller-esp32c6-ota.bin
+            dist/fsd-controller-esp32c6-full.bin
+            dist/fsd-controller-esp32c5-ota.bin
+            dist/fsd-controller-esp32c5-full.bin
           generate_release_notes: true

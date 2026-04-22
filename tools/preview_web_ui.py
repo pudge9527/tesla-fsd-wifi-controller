@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import re
 import threading
 import time
@@ -27,7 +28,7 @@ MAX_UPSTREAM_NETWORKS = 10
 SPEED_OFFSET_BUCKET_COUNT = 10
 MAX_OTA_URL_LEN = 256
 GITHUB_REPO = "pudge9527/tesla-fsd-wifi-controller"
-GITHUB_ASSET_NAME = "fsd-controller.bin"
+GITHUB_ASSET_NAME = os.getenv("PREVIEW_GITHUB_ASSET_NAME", "fsd-controller-esp32c5-ota.bin")
 
 
 def extract_embedded_html() -> str:
