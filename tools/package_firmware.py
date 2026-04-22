@@ -20,15 +20,38 @@ def resolve_input_file(build_dir: Path, configured_name: str, fallback_name: str
     raise FileNotFoundError(f"Unable to locate build artifact: {configured_name}")
 
 
-def resolve_esptool() -> str:
-    candidates = [
-        str(Path.home() / ".platformio" / "penv" / "bin" / "esptool"),
+def resolve_esptool_command() -> list[str]:
+    python_candidates = [
+        Path.home() / ".platformio" / "penv" / "bin" / "python",
+        Path.home() / ".platformio" / "penv" / "bin" / "python3",
+    ]
+
+    def wrap_script(script_path: str) -> list[str]:
+        for python_path in python_candidates:
+            if python_path.is_file():
+                return [str(python_path), script_path]
+        return [sys.executable, script_path]
+
+    path_candidates = [
+        Path.home() / ".platformio" / "penv" / "bin" / "esptool",
+        Path.home() / ".platformio" / "penv" / "bin" / "esptool.py",
+        Path.home() / ".platformio" / "packages" / "tool-esptoolpy" / "esptool",
+        Path.home() / ".platformio" / "packages" / "tool-esptoolpy" / "esptool.py",
+    ]
+    for candidate in path_candidates:
+        if not candidate.is_file():
+            continue
+        return wrap_script(str(candidate)) if candidate.suffix == ".py" else [str(candidate)]
+
+    which_candidates = [
         shutil.which("esptool"),
         shutil.which("esptool.py"),
     ]
-    for candidate in candidates:
-        if candidate:
-            return candidate
+    for candidate in which_candidates:
+        if not candidate:
+            continue
+        return wrap_script(candidate) if candidate.endswith(".py") else [candidate]
+
     raise FileNotFoundError("Unable to locate esptool executable")
 
 
@@ -60,9 +83,9 @@ def main() -> int:
     shutil.copy2(app, ota_output)
 
     flash_size = args.flash_size or flash_settings["flash_size"]
-    esptool = resolve_esptool()
+    esptool_cmd = resolve_esptool_command()
     merge_cmd = [
-        esptool,
+        *esptool_cmd,
         "--chip",
         chip or "auto",
         "merge-bin",
