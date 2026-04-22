@@ -18,6 +18,8 @@ h1{font-size:22px;color:#38bdf8;font-weight:700;letter-spacing:1px}
 .summary-title h1{margin:0;font-size:30px;line-height:1.02;text-align:center}
 .summary-title h1 span{display:block}
 .summary-title-version{font-size:10px;line-height:1;color:#64748b;letter-spacing:.8px}
+.summary-title-version-btn{background:transparent;border:none;padding:0;cursor:pointer;transition:.2s;color:#64748b}
+.summary-title-version-btn:hover,.summary-title-version-btn:focus{color:#7dd3fc;outline:none}
 .summary-group{display:flex;align-items:stretch;justify-content:flex-start;gap:10px;flex-wrap:wrap;flex:1 1 320px}
 .summary-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex:0 0 auto;margin-left:auto}
 .summary-action{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;width:90px;min-width:90px;padding:10px 12px;border-radius:14px;background:#172033;border:1px solid rgba(56,189,248,.08);text-align:center}
@@ -110,6 +112,7 @@ select:disabled,.text-input:disabled,.toggle input:disabled+.slider{opacity:.45;
 .ota-panel .hint{margin-top:10px}
 .inline-actions{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .inline-actions .field-label{margin-bottom:0}
+.upstream-search-field .inline-actions{margin-bottom:5px}
 .section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px}
 .section-head .field-label{margin-bottom:0}
 .saved-list{display:flex;flex-direction:column;gap:10px;margin-top:12px}
@@ -151,6 +154,14 @@ select:disabled,.text-input:disabled,.toggle input:disabled+.slider{opacity:.45;
 .confirm-actions button{flex:1}
 .confirm-confirm-btn{background:#e31937;color:#fff;border:none}
 .confirm-confirm-btn:hover:not(:disabled){background:#c41530}
+.version-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(2,8,23,.78);z-index:10000;padding:16px}
+.version-modal.open{display:flex}
+.version-sheet{width:min(460px,100%);background:#111827;border:1px solid rgba(56,189,248,.12);border-radius:18px;box-shadow:0 28px 70px rgba(2,8,23,.45);overflow:hidden}
+.version-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 20px 12px}
+.version-title{font-size:18px;font-weight:700;color:#e2e8f0}
+.version-body{padding:0 20px 20px}
+.version-actions{display:flex;gap:10px;margin-top:16px}
+.version-actions button{flex:1}
 .status-layout{display:flex;flex-direction:column;gap:18px}
 .status-controls-panel{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px}
 .status-control-item{background:#172033;border:1px solid rgba(56,189,248,.08);border-radius:14px;padding:14px 16px}
@@ -166,9 +177,9 @@ select:disabled,.text-input:disabled,.toggle input:disabled+.slider{opacity:.45;
 .hotspot-panel{background:#172033;border:1px solid rgba(56,189,248,.08);border-radius:14px;padding:16px}
 .dns-layout{display:grid;grid-template-columns:1fr;gap:18px;align-items:start}
 .dns-panel{background:#172033;border:1px solid rgba(56,189,248,.08);border-radius:14px;padding:16px}
-.dns-editor-panel{display:flex;flex-direction:column}
-.dns-editor-panel .field{display:flex;flex-direction:column}
-.dns-editor-panel .text-area{flex:1 1 auto}
+.dns-editor-panel{display:flex;flex-direction:column;align-items:stretch}
+.dns-editor-panel .field{display:flex;flex-direction:column;flex:none;min-height:auto}
+.dns-editor-panel .text-area{flex:none;height:140px;min-height:140px}
 .dns-stats-strip{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
 .dns-stat-chip{display:flex;align-items:center;gap:10px;min-width:0;padding:10px 12px;border-radius:12px;background:#1a2740;border:1px solid #334155;flex:1 1 0}
 .dns-stat-label{font-size:12px;color:#94a3b8;white-space:nowrap}
@@ -192,9 +203,9 @@ body{padding:24px}
 .card-ota{grid-column:1 / -1;grid-row:5}
 .ota-layout{grid-template-columns:repeat(2,minmax(0,1fr))}
 .hotspot-layout{grid-template-columns:1fr 1fr}
-.dns-layout{grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch}
-.dns-editor-panel .field{flex:1 1 0;min-height:0}
-.dns-editor-panel .text-area{min-height:170px}
+.dns-layout{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
+.dns-editor-panel .field{flex:none;min-height:auto}
+.dns-editor-panel .text-area{height:170px;min-height:170px}
 .card{padding:20px}
 .row,.status-row{padding:13px 0}
 .status-text{max-width:60%}
@@ -229,7 +240,7 @@ body{padding:12px}
 <div class="summary-strip">
   <div class="summary-title">
     <h1><span>FSD</span><span>控制器</span></h1>
-    <div class="summary-title-version" id="topHeaderVersion">--</div>
+    <button type="button" class="summary-title-version summary-title-version-btn" id="topHeaderVersion" onclick="openVersionDialog()">--</button>
   </div>
   <div class="summary-group">
     <div class="summary-pill">
@@ -431,26 +442,24 @@ body{padding:12px}
         <span class="row-label">启用上游热点接入</span>
         <label class="toggle"><input type="checkbox" id="upstreamEnable" onchange="confirmUpstreamToggle(this)"><span class="slider"></span></label>
       </div>
-      <div class="field">
+      <div class="field upstream-search-field">
         <div class="inline-actions">
-          <label class="field-label" for="scanResults">搜索附近上游热点</label>
+          <label class="field-label" for="upstreamSSID">名称</label>
           <button class="ghost-btn small-btn" id="scanBtn" onclick="scanUpstreamNetworks()">搜索热点</button>
         </div>
-        <div class="picker-wrap">
-          <select id="scanResults" class="picker-native" data-picker-title="选择附近热点" data-picker-trigger="scanResultsBtn">
-            <option value="">点击“搜索热点”查看附近可用热点</option>
-          </select>
-          <button type="button" class="picker-trigger" id="scanResultsBtn" onclick="openPicker('scanResults')"></button>
-        </div>
+        <input class="text-input" type="text" id="upstreamSSID" maxlength="32" placeholder="搜索不到时可手动填写">
+        <select id="scanResults" class="picker-native" data-picker-title="选择附近热点" onchange="applyScanResultSelection()">
+          <option value="">点击“搜索热点”查看附近可用热点</option>
+        </select>
       </div>
       <div class="field">
-        <label class="field-label" for="upstreamPass">上游热点密码</label>
+        <label class="field-label" for="upstreamPass">密码</label>
         <input class="text-input" type="password" id="upstreamPass" maxlength="63" placeholder="首次添加或更新密码时填写">
       </div>
       <div class="actions">
-        <button class="save-btn" onclick="saveSelectedUpstream()">保存选中上游热点</button>
+        <button class="save-btn" onclick="saveSelectedUpstream()">保存上游热点</button>
       </div>
-      <div class="hint">ESP32接收的热点。</div>
+      <div class="hint">ESP32接收的热点。可从列表选择，也可手动输入热点名称。</div>
       <div class="saved-list" id="savedNetworks"></div>
       <div class="msg" id="netMsg"></div>
       <div class="status-row"><span>上游状态</span><span id="sUpstream" class="status-no status-text">--</span></div>
@@ -588,6 +597,24 @@ body{padding:12px}
   </div>
 </div>
 
+<div class="version-modal" id="versionModal" onclick="closeVersionDialog(event)">
+  <div class="version-sheet" onclick="event.stopPropagation()">
+    <div class="version-head">
+      <div class="version-title">固件更新</div>
+      <button type="button" class="picker-close" onclick="closeVersionDialog()">&times;</button>
+    </div>
+    <div class="version-body">
+      <div class="status-row"><span>当前固件版本</span><span id="versionModalCurrent" class="status-ok status-text status-wide">--</span></div>
+      <div class="status-row"><span>GitHub 最新版本</span><span id="versionModalLatest" class="status-no status-text status-wide">未检查</span></div>
+      <div class="version-actions">
+        <button type="button" class="save-btn" id="versionActionBtn" onclick="doGitHubOTA()">检查更新</button>
+      </div>
+      <div class="hint">设备默认从 GitHub Release 下载当前板型对应的 OTA 固件包更新，无需手动填写固件地址。</div>
+      <div class="msg" id="versionGitHubMsg"></div>
+    </div>
+  </div>
+</div>
+
 <script>
 let dnsDirty=false;
 let apDirty=false;
@@ -598,6 +625,7 @@ let githubLatestAssetUrl='';
 let githubLatestDownloadUrl='';
 let githubUpdateAvailable=false;
 let githubOtaDownloading=false;
+let currentFirmwareVersion='--';
 let scanResults=[];
 let pendingScanResultsRender=false;
 let latestBlockedDnsRequests=[];
@@ -823,9 +851,11 @@ function syncDnsForm(d){
 }
 
 function syncOtaForm(d){
-  setWideStatusText('sFirmwareVersion',d.fwVersion||'--','status-ok');
+  currentFirmwareVersion=d.fwVersion||'--';
+  setWideStatusText('sFirmwareVersion',currentFirmwareVersion,'status-ok');
   if(d.githubLatestDownloadUrl)githubLatestDownloadUrl=d.githubLatestDownloadUrl;
   syncGitHubOtaButtons();
+  syncVersionDialog();
 }
 
 function setNetMessage(text,type){
@@ -879,6 +909,7 @@ function renderScanResults(){
     const opt=document.createElement('option');
     opt.value='';
     opt.textContent='点击“搜索热点”查看附近可用热点';
+    opt.disabled=true;
     select.appendChild(opt);
     syncPickerButton('scanResults');
     return;
@@ -887,6 +918,7 @@ function renderScanResults(){
   const placeholder=document.createElement('option');
   placeholder.value='';
   placeholder.textContent='请选择要保存的热点';
+  placeholder.disabled=true;
   select.appendChild(placeholder);
 
   scanResults.forEach(net=>{
@@ -903,6 +935,15 @@ function renderScanResults(){
     select.value=current;
   }
   syncPickerButton('scanResults');
+}
+
+// 将弹窗中选中的热点名称回填到手动输入框。
+function applyScanResultSelection(){
+  const select=document.getElementById('scanResults');
+  const input=document.getElementById('upstreamSSID');
+  if(!select||!input||!select.value)return;
+  input.value=select.value;
+  setNetMessage('已填入热点名称，请填写密码后保存','ok');
 }
 
 function refreshScanResultsSelect(force){
@@ -1031,7 +1072,8 @@ function poll(){
 
     const hwModeText=String(d.hwMode)==='0'?'LEGACY':(String(d.hwMode)==='1'?'HW3':'HW4');
     document.getElementById('topHwModeLabel').textContent=hwModeText;
-    document.getElementById('topHeaderVersion').textContent=d.fwVersion||'--';
+    currentFirmwareVersion=d.fwVersion||'--';
+    document.getElementById('topHeaderVersion').textContent=currentFirmwareVersion;
     const speedProfileText=String(d.speedProfile)==='0'?'保守':(String(d.speedProfile)==='1'?'默认':(String(d.speedProfile)==='2'?'适中':(String(d.speedProfile)==='3'?'激进':'最大')));
     setSummaryPill('topHwMode',speedProfileText,'status-ok');
 
@@ -1201,6 +1243,19 @@ function syncPickerButton(selectId){
   btn.disabled=!!select.disabled;
 }
 
+// 在底部弹层中展示搜索状态或空结果提示。
+function showPickerMessage(title,message){
+  activePickerId='';
+  document.getElementById('pickerTitle').textContent=title||'请选择';
+  const body=document.getElementById('pickerBody');
+  body.innerHTML='';
+  const empty=document.createElement('div');
+  empty.className='empty-box';
+  empty.textContent=message;
+  body.appendChild(empty);
+  document.getElementById('pickerModal').classList.add('open');
+}
+
 function openPicker(selectId){
   const select=document.getElementById(selectId);
   if(!select||select.disabled)return;
@@ -1217,6 +1272,12 @@ function openPicker(selectId){
     btn.textContent=option.textContent;
     btn.onclick=()=>choosePickerValue(selectId,option.value);
     body.appendChild(btn);
+  }
+  if(!body.children.length){
+    const empty=document.createElement('div');
+    empty.className='empty-box';
+    empty.textContent='没有可选项';
+    body.appendChild(empty);
   }
   document.getElementById('pickerModal').classList.add('open');
 }
@@ -1295,6 +1356,7 @@ function scanUpstreamNetworks(){
   const btn=document.getElementById('scanBtn');
   btn.disabled=true;
   setNetMessage('搜索中...','');
+  showPickerMessage('搜索附近上游热点','搜索中...');
 
   fetch('/api/upstream/scan').then(r=>{
     if(!r.ok){
@@ -1304,20 +1366,33 @@ function scanUpstreamNetworks(){
   }).then(d=>{
     scanResults=Array.isArray(d.results)?d.results:[];
     refreshScanResultsSelect(true);
-    setNetMessage(scanResults.length?'已更新附近热点':'没有搜索到可用热点','ok');
+    if(scanResults.length){
+      setNetMessage('已更新附近热点','ok');
+      openPicker('scanResults');
+    }else{
+      setNetMessage('没有搜索到可用热点','ok');
+      showPickerMessage('搜索附近上游热点','没有搜索到可用热点');
+    }
   }).catch(err=>{
     setNetMessage(err.message||'搜索失败','err');
+    showPickerMessage('搜索附近上游热点',err.message||'搜索失败');
   }).finally(()=>{
     btn.disabled=false;
   });
 }
 
 function saveSelectedUpstream(){
-  const ssid=document.getElementById('scanResults').value;
+  const manualSSID=(document.getElementById('upstreamSSID').value||'').trim();
+  const ssid=manualSSID||document.getElementById('scanResults').value;
   const pass=document.getElementById('upstreamPass').value;
 
   if(!ssid){
-    setNetMessage('请先选择要保存的热点','err');
+    setNetMessage('请先选择或输入要保存的热点','err');
+    return;
+  }
+
+  if(ssid.length>32){
+    setNetMessage('热点名称最多 32 个字符','err');
     return;
   }
 
@@ -1333,6 +1408,7 @@ function saveSelectedUpstream(){
     }
     return r.text();
   }).then(()=>{
+    document.getElementById('upstreamSSID').value='';
     document.getElementById('upstreamPass').value='';
     setNetMessage(document.getElementById('upstreamEnable').checked?'热点已保存，设备会自动切换到可连接的热点':'热点已保存，启用后会自动连接','ok');
     poll();
@@ -1464,6 +1540,7 @@ function setOtaMessage(id,text,type){
 
 function setGitHubOtaMessage(text,type){
   setOtaMessage('otaGitHubMsg',text,type);
+  setOtaMessage('versionGitHubMsg',text,type);
 }
 
 function setUploadOtaMessage(text,type){
@@ -1472,19 +1549,33 @@ function setUploadOtaMessage(text,type){
 
 function syncGitHubOtaButtons(){
   const githubBtn=document.getElementById('githubOtaBtn');
-  if(!githubBtn)return;
-  if(githubOtaCheckBusy){
-    githubBtn.textContent='正在检查更新';
-    githubBtn.disabled=true;
-    return;
+  const versionActionBtn=document.getElementById('versionActionBtn');
+
+  if(githubBtn){
+    if(githubOtaCheckBusy){
+      githubBtn.textContent='正在检查更新';
+      githubBtn.disabled=true;
+    }else if(githubOtaDownloading){
+      githubBtn.textContent='正在下载新版本';
+      githubBtn.disabled=true;
+    }else{
+      githubBtn.textContent=githubUpdateAvailable&&githubLatestDownloadUrl?'一键更新':'检查更新';
+      githubBtn.disabled=!!otaBusy;
+    }
   }
-  if(githubOtaDownloading){
-    githubBtn.textContent='正在下载新版本';
-    githubBtn.disabled=true;
-    return;
+
+  if(versionActionBtn){
+    if(githubOtaCheckBusy){
+      versionActionBtn.textContent='正在检查更新';
+    }else if(githubOtaDownloading){
+      versionActionBtn.textContent='正在一键更新';
+    }else{
+      versionActionBtn.textContent=githubUpdateAvailable&&githubLatestDownloadUrl?'一键更新':'检查更新';
+    }
+    versionActionBtn.disabled=!!otaBusy||githubOtaCheckBusy||githubOtaDownloading;
   }
-  githubBtn.textContent=githubUpdateAvailable&&githubLatestDownloadUrl?'一键更新':'检查更新';
-  githubBtn.disabled=!!otaBusy;
+
+  syncVersionDialog();
 }
 
 function syncOtaUploadButton(){
@@ -1500,6 +1591,34 @@ function setOtaBusy(busy){
   if(fileInput)fileInput.disabled=otaBusy;
   syncOtaUploadButton();
   syncGitHubOtaButtons();
+}
+
+function syncVersionDialog(){
+  const currentSource=document.getElementById('sFirmwareVersion');
+  const latestSource=document.getElementById('sGitHubLatestVersion');
+  const currentTarget=document.getElementById('versionModalCurrent');
+  const latestTarget=document.getElementById('versionModalLatest');
+
+  if(currentTarget){
+    currentTarget.textContent=currentSource?currentSource.textContent:(currentFirmwareVersion||'--');
+    currentTarget.className=currentSource?currentSource.className:'status-ok status-text status-wide';
+  }
+
+  if(latestTarget){
+    latestTarget.textContent=latestSource?latestSource.textContent:(githubLatestVersion||'未检查');
+    latestTarget.className=latestSource?latestSource.className:'status-no status-text status-wide';
+  }
+}
+
+function openVersionDialog(){
+  syncVersionDialog();
+  document.getElementById('versionModal').classList.add('open');
+}
+
+function closeVersionDialog(evt){
+  const modal=document.getElementById('versionModal');
+  if(evt&&evt.target&&evt.target!==modal)return;
+  modal.classList.remove('open');
 }
 
 function fileChosen(inp){
@@ -1617,7 +1736,7 @@ async function doGitHubOTA(){
 
   const confirmed=await openConfirmDialog({
     title:'确认更新 GitHub 最新版',
-    message:'当前版本 '+(data.currentVersion||'--')+'，GitHub 最新版本 '+data.latestVersion+'。确定开始更新吗？',
+    message:'当前版本 '+(currentFirmwareVersion||'--')+'，GitHub 最新版本 '+(githubLatestVersion||'--')+'。确定开始更新吗？',
     confirmText:'更新'
   });
   if(!confirmed)return;
@@ -1644,6 +1763,7 @@ async function restartDevice(){
 document.addEventListener('keydown',event=>{
   if(event.key==='Escape'){
     closeConfirmDialog(false);
+    closeVersionDialog();
   }
 });
 
