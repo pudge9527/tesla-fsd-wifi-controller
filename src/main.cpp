@@ -14,7 +14,10 @@
 #include <ESPAsyncWebServer.h>
 #include <Update.h>
 #include <Preferences.h>
+#include <esp_timer.h>
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "soc/soc_caps.h"
 #include "lwip/lwip_napt.h"
 
@@ -896,6 +899,90 @@ int getActiveSpeedOffsetPercent() {
     return cfg.speedOffsetBuckets[bucketIndex];
 }
 
+// Return averaged CPU usage across all available cores.
+int getCpuUsageAveragePercent() {
+#if defined(configGENERATE_RUN_TIME_STATS) && (configGENERATE_RUN_TIME_STATS == 1) && \
+    defined(INCLUDE_xTaskGetIdleTaskHandle) && (INCLUDE_xTaskGetIdleTaskHandle == 1)
+    uint32_t idlePercentSum = 0;
+
+#if (SOC_CPU_CORES_NUM > 1) && !CONFIG_FREERTOS_SMP
+    for (BaseType_t core = 0; core < SOC_CPU_CORES_NUM; ++core) {
+        uint32_t idlePercent = static_cast<uint32_t>(ulTaskGetIdleRunTimePercentForCore(core));
+        idlePercentSum += std::min(idlePercent, 100u);
+    }
+#else
+    uint32_t idlePercent = static_cast<uint32_t>(ulTaskGetIdleRunTimePercent());
+    idlePercentSum = std::min(idlePercent, 100u) * SOC_CPU_CORES_NUM;
+#endif
+
+    uint32_t averageIdlePercent = idlePercentSum / SOC_CPU_CORES_NUM;
+    if (averageIdlePercent > 100u) averageIdlePercent = 100u;
+    return static_cast<int>(100u - averageIdlePercent);
+#else
+    return -1;
+#endif
+}
+
+// Return CPU usage for the latest sampling window across all available cores.
+int getCpuUsagePercent() {
+#if defined(configGENERATE_RUN_TIME_STATS) && (configGENERATE_RUN_TIME_STATS == 1) && \
+    defined(INCLUDE_xTaskGetIdleTaskHandle) && (INCLUDE_xTaskGetIdleTaskHandle == 1)
+    static bool initialized = false;
+    static uint64_t lastSampleUs = 0;
+    static uint32_t lastIdleRunTimeUs[SOC_CPU_CORES_NUM] = {};
+    static int lastCpuUsagePct = -1;
+    static constexpr uint64_t CPU_USAGE_MIN_SAMPLE_US = 250000;
+    static constexpr uint64_t CPU_USAGE_MAX_SAMPLE_US = 5000000;
+
+    uint64_t currentSampleUs = static_cast<uint64_t>(esp_timer_get_time());
+    uint32_t currentIdleRunTimeUs[SOC_CPU_CORES_NUM] = {};
+
+#if (SOC_CPU_CORES_NUM > 1) && !CONFIG_FREERTOS_SMP
+    for (BaseType_t core = 0; core < SOC_CPU_CORES_NUM; ++core) {
+        currentIdleRunTimeUs[core] = static_cast<uint32_t>(ulTaskGetIdleRunTimeCounterForCore(core));
+    }
+#else
+    currentIdleRunTimeUs[0] = static_cast<uint32_t>(ulTaskGetIdleRunTimeCounter());
+#endif
+
+    if (!initialized) {
+        initialized = true;
+        lastSampleUs = currentSampleUs;
+        for (uint8_t core = 0; core < SOC_CPU_CORES_NUM; ++core) {
+            lastIdleRunTimeUs[core] = currentIdleRunTimeUs[core];
+        }
+        lastCpuUsagePct = getCpuUsageAveragePercent();
+        return lastCpuUsagePct;
+    }
+
+    uint64_t elapsedUs = currentSampleUs - lastSampleUs;
+    if (elapsedUs < CPU_USAGE_MIN_SAMPLE_US) {
+        return lastCpuUsagePct;
+    }
+
+    lastSampleUs = currentSampleUs;
+    uint64_t idleDeltaUs = 0;
+    for (uint8_t core = 0; core < SOC_CPU_CORES_NUM; ++core) {
+        idleDeltaUs += static_cast<uint32_t>(currentIdleRunTimeUs[core] - lastIdleRunTimeUs[core]);
+        lastIdleRunTimeUs[core] = currentIdleRunTimeUs[core];
+    }
+
+    if (elapsedUs > CPU_USAGE_MAX_SAMPLE_US) {
+        lastCpuUsagePct = getCpuUsageAveragePercent();
+        return lastCpuUsagePct;
+    }
+
+    uint64_t totalCapacityUs = elapsedUs * SOC_CPU_CORES_NUM;
+    uint64_t clampedIdleDeltaUs = std::min(idleDeltaUs, totalCapacityUs);
+    uint64_t busyDeltaUs = totalCapacityUs - clampedIdleDeltaUs;
+
+    lastCpuUsagePct = static_cast<int>((busyDeltaUs * 100u + (totalCapacityUs / 2u)) / totalCapacityUs);
+    return lastCpuUsagePct;
+#else
+    return -1;
+#endif
+}
+
 String buildStatusJson() {
     uint32_t uptime = (millis() - cfg.uptimeStart) / 1000;
     bool upstreamConnected = WiFi.status() == WL_CONNECTED;
@@ -919,21 +1006,33 @@ String buildStatusJson() {
     String natStatus = jsonEscape(String(getNATStatusText()));
     String thermalStatusText = jsonEscape(String(getThermalStatusText()));
     String fwVersion = jsonEscape(String(APP_VERSION));
+    String chipModel = jsonEscape(String(ESP.getChipModel()));
     String otaOnlineState = jsonEscape(String(getOnlineOTAStateText(static_cast<OnlineOTAState>(otaStatus.state))));
     String otaOnlineMessage = jsonEscape(String(otaStatus.message));
     size_t otaOnlineTotalBytes = otaStatus.totalBytes;
     size_t otaOnlineWrittenBytes = otaStatus.writtenBytes;
+    uint16_t chipRevision = ESP.getChipRevision();
+    uint8_t chipCores = ESP.getChipCores();
+    uint32_t cpuFreqMHz = ESP.getCpuFreqMHz();
+    uint32_t flashChipSize = ESP.getFlashChipSize();
+    uint32_t flashChipSpeedMHz = ESP.getFlashChipSpeed() / 1000000u;
+    uint32_t sketchSize = ESP.getSketchSize();
+    uint32_t heapSize = ESP.getHeapSize();
+    uint32_t freeHeap = ESP.getFreeHeap();
+    uint32_t minFreeHeap = ESP.getMinFreeHeap();
+    uint32_t psramSize = ESP.getPsramSize();
     String savedNetworks = buildSavedUpstreamNetworksJson();
     uint32_t dnsBlockedCount = 0;
     size_t dnsBlockedRecentCount = 0;
     String dnsBlockedRequests = buildBlockedDnsRequestsJson(dnsBlockedCount, dnsBlockedRecentCount);
     int activeSpeedOffsetPct = getActiveSpeedOffsetPercent();
+    int cpuUsagePct = getCpuUsagePercent();
     float effectiveSpeedLimit = (cfg.roadSpeedLimit >= 0 && activeSpeedOffsetPct >= 0)
         ? static_cast<float>(cfg.roadSpeedLimit) * (1.0f + static_cast<float>(activeSpeedOffsetPct) / 100.0f)
         : NAN;
     String json;
 
-    json.reserve(7800);
+    json.reserve(8400);
     json += "{";
     json += "\"rx\":";
     json += String((unsigned)cfg.rxCount);
@@ -943,6 +1042,31 @@ String buildStatusJson() {
     json += String((unsigned)cfg.errorCount);
     json += ",\"uptime\":";
     json += String((unsigned)uptime);
+    json += ",\"cpuUsagePct\":";
+    json += cpuUsagePct >= 0 ? String(cpuUsagePct) : "null";
+    json += ",\"chipModel\":\"";
+    json += chipModel;
+    json += "\"";
+    json += ",\"chipRevision\":";
+    json += String(chipRevision);
+    json += ",\"chipCores\":";
+    json += String(chipCores);
+    json += ",\"cpuFreqMHz\":";
+    json += String(cpuFreqMHz);
+    json += ",\"flashChipSize\":";
+    json += String(flashChipSize);
+    json += ",\"flashChipSpeedMHz\":";
+    json += String(flashChipSpeedMHz);
+    json += ",\"sketchSize\":";
+    json += String(sketchSize);
+    json += ",\"heapSize\":";
+    json += String(heapSize);
+    json += ",\"freeHeap\":";
+    json += String(freeHeap);
+    json += ",\"minFreeHeap\":";
+    json += String(minFreeHeap);
+    json += ",\"psramSize\":";
+    json += String(psramSize);
     json += ",\"chipTempC\":";
     json += std::isfinite(thermalStatus.currentC) ? String(thermalStatus.currentC, 1) : "null";
     json += ",\"chipTempAvgC\":";

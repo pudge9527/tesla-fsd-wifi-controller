@@ -182,6 +182,17 @@ class PreviewState:
         self.ap_ip = "9.9.9.9"
         self.ap_clients = 1
         self.wifi_channel = 6
+        self.chip_model = "ESP32-C5"
+        self.chip_revision = 0
+        self.chip_cores = 1
+        self.cpu_freq_mhz = 240
+        self.flash_chip_size = 16 * 1024 * 1024
+        self.flash_chip_speed_mhz = 80
+        self.sketch_size = 1_454_968
+        self.heap_size = 327_680
+        self.free_heap = 181_240
+        self.min_free_heap = 166_912
+        self.psram_size = 0
 
         self.upstream_enable = True
         self.saved_networks: list[SavedNetwork] = [
@@ -242,6 +253,10 @@ class PreviewState:
         current = 46.2 + 1.4 * math.sin(uptime / 11.0)
         average = 45.5 + 0.8 * math.sin(uptime / 19.0)
         return round(current, 1), round(average, 1), "正常", False
+
+    def cpu_usage_pct(self) -> int:
+        uptime = self.uptime_seconds()
+        return int(round(28 + 6 * math.sin(uptime / 9.0)))
 
     def is_reserved_upstream_ssid(self, ssid: str) -> bool:
         return ssid == self.ap_ssid
@@ -343,6 +358,18 @@ class PreviewState:
             "modified": self.modified_count,
             "errors": self.error_count,
             "uptime": uptime,
+            "cpuUsagePct": self.cpu_usage_pct(),
+            "chipModel": self.chip_model,
+            "chipRevision": self.chip_revision,
+            "chipCores": self.chip_cores,
+            "cpuFreqMHz": self.cpu_freq_mhz,
+            "flashChipSize": self.flash_chip_size,
+            "flashChipSpeedMHz": self.flash_chip_speed_mhz,
+            "sketchSize": self.sketch_size,
+            "heapSize": self.heap_size,
+            "freeHeap": self.free_heap,
+            "minFreeHeap": self.min_free_heap,
+            "psramSize": self.psram_size,
             "chipTempC": chip_temp_c,
             "chipTempAvgC": chip_temp_avg_c,
             "roadSpeedLimit": self.road_speed_limit,

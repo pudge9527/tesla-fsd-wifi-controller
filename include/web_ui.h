@@ -29,9 +29,11 @@ h1{font-size:22px;color:#38bdf8;font-weight:700;letter-spacing:1px}
 .summary-restart-btn span{display:block}
 .summary-restart-btn:hover:not(:disabled){background:#c41530}
 .summary-restart-btn:disabled{opacity:.4;cursor:not-allowed}
-.summary-pill{min-width:110px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:10px 12px;border-radius:12px;background:#172033;border:1px solid rgba(56,189,248,.08);text-align:center}
-.summary-pill-label{font-size:11px;letter-spacing:1px;color:#64748b;text-align:center}
-.summary-pill-value{display:inline-flex;align-items:center;justify-content:center;align-self:center;min-height:28px;padding:0 10px;border-radius:999px;font-size:13px;font-weight:700}
+.summary-pill{flex:0 0 auto;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:10px 10px;border-radius:12px;background:#172033;border:1px solid rgba(56,189,248,.08);text-align:center}
+.summary-pill-button{appearance:none;-webkit-appearance:none;cursor:pointer;color:inherit;font:inherit;transition:border-color .2s}
+.summary-pill-button:hover,.summary-pill-button:focus{border-color:rgba(56,189,248,.24);outline:none}
+.summary-pill-label{font-size:11px;letter-spacing:1px;color:#64748b;text-align:center;white-space:nowrap}
+.summary-pill-value{display:inline-flex;align-items:center;justify-content:center;align-self:center;min-height:28px;padding:0 10px;border-radius:999px;font-size:13px;font-weight:700;white-space:nowrap}
 .summary-pill-value.status-ok,.summary-pill-value.status-yes{color:#86efac;background:rgba(34,197,94,.14)}
 .summary-pill-value.status-warn{color:#fde68a;background:rgba(234,179,8,.14)}
 .summary-pill-value.status-err{color:#fca5a5;background:rgba(239,68,68,.14)}
@@ -221,7 +223,7 @@ body{padding:12px}
 .summary-actions{flex:1 1 100%;justify-content:flex-start;margin-left:0}
 .summary-action{min-width:0;flex:0 0 auto}
 .summary-restart-btn{flex:0 0 auto}
-.summary-pill{min-width:calc(50% - 5px)}
+.summary-pill{flex:1 1 calc(50% - 5px);min-width:calc(50% - 5px)}
 .speed-offset-row-main{width:100%;justify-content:flex-start}
 .status-controls-panel{grid-template-columns:1fr}
 .ota-layout{grid-template-columns:1fr}
@@ -260,6 +262,10 @@ body{padding:12px}
       <span class="summary-pill-label">白/黑名单</span>
       <span class="summary-pill-value status-no" id="topDnsRules">--</span>
     </div>
+    <button type="button" class="summary-pill summary-pill-button" id="topCpuUsageCard" onclick="openHardwareInfoDialog()" aria-haspopup="dialog">
+      <span class="summary-pill-label">CPU占用</span>
+      <span class="summary-pill-value status-no" id="topCpuUsage">--</span>
+    </button>
     <div class="summary-pill">
       <span class="summary-pill-label">芯片温度</span>
       <span class="summary-pill-value status-no" id="topThermalState">--</span>
@@ -622,6 +628,29 @@ body{padding:12px}
   </div>
 </div>
 
+<div class="version-modal" id="hardwareInfoModal" onclick="closeHardwareInfoDialog(event)">
+  <div class="version-sheet" onclick="event.stopPropagation()">
+    <div class="version-head">
+      <div class="version-title">硬件信息</div>
+      <button type="button" class="picker-close" onclick="closeHardwareInfoDialog()">&times;</button>
+    </div>
+    <div class="version-body">
+      <div class="status-row"><span>固件版本</span><span id="hardwareInfoFw" class="status-no status-text status-wide">--</span></div>
+      <div class="status-row"><span>芯片型号</span><span id="hardwareInfoChipModel" class="status-no status-text status-wide">--</span></div>
+      <div class="status-row"><span>芯片修订</span><span id="hardwareInfoChipRevision" class="status-no status-text status-wide">--</span></div>
+      <div class="status-row"><span>核心数量</span><span id="hardwareInfoChipCores" class="status-no status-text status-wide">--</span></div>
+      <div class="status-row"><span>CPU 频率</span><span id="hardwareInfoCpuFreq" class="status-no status-text status-wide">--</span></div>
+      <div class="status-row"><span>Flash 大小</span><span id="hardwareInfoFlashSize" class="status-no status-text status-wide">--</span></div>
+      <div class="status-row"><span>Flash 速度</span><span id="hardwareInfoFlashSpeed" class="status-no status-text status-wide">--</span></div>
+      <div class="status-row"><span>程序大小</span><span id="hardwareInfoSketchSize" class="status-no status-text status-wide">--</span></div>
+      <div class="status-row"><span>堆总量</span><span id="hardwareInfoHeapSize" class="status-no status-text status-wide">--</span></div>
+      <div class="status-row"><span>当前空闲堆</span><span id="hardwareInfoFreeHeap" class="status-no status-text status-wide">--</span></div>
+      <div class="status-row"><span>最小空闲堆</span><span id="hardwareInfoMinFreeHeap" class="status-no status-text status-wide">--</span></div>
+      <div class="status-row"><span>PSRAM</span><span id="hardwareInfoPsramSize" class="status-no status-text status-wide">--</span></div>
+    </div>
+  </div>
+</div>
+
 <script>
 let dnsDirty=false;
 let apDirty=false;
@@ -637,6 +666,7 @@ let githubOtaPendingVerify=false;
 let githubOtaExpectedVersion='';
 let githubOtaVerifyDeadline=0;
 let currentFirmwareVersion='--';
+let latestStatusData=null;
 let scanResults=[];
 let pendingScanResultsRender=false;
 let latestBlockedDnsRequests=[];
@@ -695,6 +725,23 @@ function setDnsStatValue(id,text,className){
 function syncFsdToggleUI(enabled){
   const topToggle=document.getElementById('topFsdEnable');
   if(topToggle)topToggle.checked=!!enabled;
+}
+
+function syncHardwareInfoDialog(){
+  const data=latestStatusData||{};
+  setWideStatusText('hardwareInfoFw',data.fwVersion||'--',data.fwVersion?'status-ok':'status-no');
+  setWideStatusText('hardwareInfoChipModel',data.chipModel||'--',data.chipModel?'status-ok':'status-no');
+  setWideStatusText('hardwareInfoChipRevision',typeof data.chipRevision==='number'&&Number.isFinite(data.chipRevision)?('Rev '+String(data.chipRevision)):'--',typeof data.chipRevision==='number'&&Number.isFinite(data.chipRevision)?'status-ok':'status-no');
+  setWideStatusText('hardwareInfoChipCores',typeof data.chipCores==='number'&&Number.isFinite(data.chipCores)?String(data.chipCores):'--',typeof data.chipCores==='number'&&Number.isFinite(data.chipCores)?'status-ok':'status-no');
+  setWideStatusText('hardwareInfoCpuFreq',typeof data.cpuFreqMHz==='number'&&Number.isFinite(data.cpuFreqMHz)?(String(data.cpuFreqMHz)+' MHz'):'--',typeof data.cpuFreqMHz==='number'&&Number.isFinite(data.cpuFreqMHz)?'status-ok':'status-no');
+  setWideStatusText('hardwareInfoFlashSize',typeof data.flashChipSize==='number'&&Number.isFinite(data.flashChipSize)?formatBytes(data.flashChipSize):'--',typeof data.flashChipSize==='number'&&Number.isFinite(data.flashChipSize)?'status-ok':'status-no');
+  setWideStatusText('hardwareInfoFlashSpeed',typeof data.flashChipSpeedMHz==='number'&&Number.isFinite(data.flashChipSpeedMHz)?(String(data.flashChipSpeedMHz)+' MHz'):'--',typeof data.flashChipSpeedMHz==='number'&&Number.isFinite(data.flashChipSpeedMHz)?'status-ok':'status-no');
+  setWideStatusText('hardwareInfoSketchSize',typeof data.sketchSize==='number'&&Number.isFinite(data.sketchSize)?formatBytes(data.sketchSize):'--',typeof data.sketchSize==='number'&&Number.isFinite(data.sketchSize)?'status-ok':'status-no');
+  setWideStatusText('hardwareInfoHeapSize',typeof data.heapSize==='number'&&Number.isFinite(data.heapSize)?formatBytes(data.heapSize):'--',typeof data.heapSize==='number'&&Number.isFinite(data.heapSize)?'status-ok':'status-no');
+  setWideStatusText('hardwareInfoFreeHeap',typeof data.freeHeap==='number'&&Number.isFinite(data.freeHeap)?formatBytes(data.freeHeap):'--',typeof data.freeHeap==='number'&&Number.isFinite(data.freeHeap)?'status-ok':'status-no');
+  setWideStatusText('hardwareInfoMinFreeHeap',typeof data.minFreeHeap==='number'&&Number.isFinite(data.minFreeHeap)?formatBytes(data.minFreeHeap):'--',typeof data.minFreeHeap==='number'&&Number.isFinite(data.minFreeHeap)?'status-ok':'status-no');
+  const psramText=typeof data.psramSize==='number'&&Number.isFinite(data.psramSize)&&data.psramSize>0?formatBytes(data.psramSize):'无';
+  setWideStatusText('hardwareInfoPsramSize',psramText,typeof data.psramSize==='number'&&Number.isFinite(data.psramSize)&&data.psramSize>0?'status-ok':'status-no');
 }
 
 function syncToggleInput(inputOrId,enabled){
@@ -1075,6 +1122,7 @@ function renderBlockedDnsRequests(requests,currentUptime){
 
 function poll(){
   fetch('/api/status').then(r=>r.json()).then(d=>{
+    latestStatusData=d;
     document.getElementById('sModified').textContent=d.modified;
     document.getElementById('sRX').textContent=d.rx;
     document.getElementById('sErrors').textContent=d.errors;
@@ -1105,6 +1153,12 @@ function poll(){
     setSpeedOffsetInlineValue('speedOffsetRoadInline',roadLimitText,roadLimitValid?'status-ok':'status-no');
     setSpeedOffsetInlineValue('speedOffsetCurrentInline',offsetValid?('+'+String(d.activeSpeedOffsetPct)+'%'):'--',offsetValid?(d.activeSpeedOffsetPct>0?'status-ok':'status-no'):'status-no');
     setSpeedOffsetInlineValue('speedOffsetResultInline',resultValid?String(d.effectiveSpeedLimit):'--',resultValid?'status-ok':'status-no');
+
+    const cpuUsageValid=typeof d.cpuUsagePct==='number'&&Number.isFinite(d.cpuUsagePct);
+    let cpuUsageClass='status-ok';
+    if(cpuUsageValid&&d.cpuUsagePct>=85)cpuUsageClass='status-err';
+    else if(cpuUsageValid&&d.cpuUsagePct>=65)cpuUsageClass='status-warn';
+    setSummaryPill('topCpuUsage',cpuUsageValid?(String(Math.round(d.cpuUsagePct))+'%'):'--',cpuUsageValid?cpuUsageClass:'status-no');
 
     let thermalClass='status-ok';
     if(d.thermalProtect)thermalClass='status-err';
@@ -1165,6 +1219,7 @@ function poll(){
     setDnsStatValue('sDNSCount',String(d.dnsWhitelistCount||0),d.dnsWhitelistCount?'status-ok':'status-no');
     setDnsStatValue('sDNSBlockCount',String(d.dnsBlacklistCount||0),d.dnsBlacklistCount?'status-err':'status-no');
     setDnsStatValue('sDNSBlocked',String(d.dnsBlockedCount||0),d.dnsBlockedCount?'status-err':'status-no');
+    syncHardwareInfoDialog();
     latestBlockedDnsRequests=Array.isArray(d.dnsBlockedRequests)?d.dnsBlockedRequests:[];
     latestStatusUptime=d.uptime||0;
     renderBlockedDnsRequests(latestBlockedDnsRequests,latestStatusUptime);
@@ -1783,6 +1838,17 @@ function openVersionDialog(){
 
 function closeVersionDialog(evt){
   const modal=document.getElementById('versionModal');
+  if(evt&&evt.target&&evt.target!==modal)return;
+  modal.classList.remove('open');
+}
+
+function openHardwareInfoDialog(){
+  syncHardwareInfoDialog();
+  document.getElementById('hardwareInfoModal').classList.add('open');
+}
+
+function closeHardwareInfoDialog(evt){
+  const modal=document.getElementById('hardwareInfoModal');
   if(evt&&evt.target&&evt.target!==modal)return;
   modal.classList.remove('open');
 }
