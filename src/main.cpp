@@ -908,11 +908,11 @@ int getCpuUsageAveragePercent() {
 #if (SOC_CPU_CORES_NUM > 1) && !CONFIG_FREERTOS_SMP
     for (BaseType_t core = 0; core < SOC_CPU_CORES_NUM; ++core) {
         uint32_t idlePercent = static_cast<uint32_t>(ulTaskGetIdleRunTimePercentForCore(core));
-        idlePercentSum += std::min(idlePercent, 100u);
+        idlePercentSum += std::min(idlePercent, static_cast<decltype(idlePercent)>(100));
     }
 #else
     uint32_t idlePercent = static_cast<uint32_t>(ulTaskGetIdleRunTimePercent());
-    idlePercentSum = std::min(idlePercent, 100u) * SOC_CPU_CORES_NUM;
+    idlePercentSum = std::min(idlePercent, static_cast<decltype(idlePercent)>(100)) * SOC_CPU_CORES_NUM;
 #endif
 
     uint32_t averageIdlePercent = idlePercentSum / SOC_CPU_CORES_NUM;
