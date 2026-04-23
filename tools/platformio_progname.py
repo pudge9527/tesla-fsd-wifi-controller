@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 import subprocess
 
-if env.get("BOARD_MCU") in {"esp32c3", "esp32c5", "esp32s3"}:
+if env.get("BOARD_MCU") in {"esp32", "esp32c3", "esp32c5", "esp32c6", "esp32s3"}:
     os.environ.setdefault("IDF_COMPONENT_MANAGER", "0")
 
 env.Replace(PROGNAME=env.GetProjectOption("custom_progname", "fsd-controller"))
