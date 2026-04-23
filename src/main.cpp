@@ -50,6 +50,7 @@ static constexpr uint8_t MAX_UPSTREAM_NETWORKS = 10;
 static constexpr uint8_t MAX_SCAN_RESULTS = 12;
 static constexpr uint32_t THERMAL_SAMPLE_MS = 5000;
 static constexpr size_t MAX_OTA_URL_LEN = 256;
+static constexpr size_t MAX_OTA_STATUS_MSG_LEN = 160;
 static constexpr float CHIP_TEMP_WARN_C = 65.0f;
 static constexpr float CHIP_TEMP_THROTTLE_C = 75.0f;
 static constexpr float CHIP_TEMP_PROTECT_C = 80.0f;
@@ -66,6 +67,14 @@ static DNSWhitelistServer dnsServer;
 static volatile bool  otaPendingRestart = false;
 static volatile bool  otaOnlineInProgress = false;
 static bool           natEnabled = false;
+static TaskHandle_t   otaOnlineTaskHandle = nullptr;
+
+enum class OnlineOTAState : uint8_t {
+    Idle = 0,
+    Running,
+    Success,
+    Error
+};
 
 struct LocalAPConfig {
     char ssid[33] = "FSD-Controller";
@@ -108,6 +117,15 @@ struct OnlineOTAConfig {
 
 static OnlineOTAConfig otaCfg;
 
+struct OnlineOTAStatus {
+    volatile OnlineOTAState state = OnlineOTAState::Idle;
+    volatile size_t totalBytes = 0;
+    volatile size_t writtenBytes = 0;
+    char message[MAX_OTA_STATUS_MSG_LEN + 1] = {};
+};
+
+static OnlineOTAStatus otaStatus;
+
 enum class ThermalLevel : uint8_t {
     Normal = 0,
     Warning,
@@ -127,6 +145,16 @@ static ThermalStatus thermalStatus;
 #ifndef PIN_LED
 #define PIN_LED 2   // ESP32 DevKit onboard LED
 #endif
+
+static BaseType_t createWorkerTask(TaskFunction_t taskFn, const char* name,
+                                   uint32_t stackWords, void* param,
+                                   UBaseType_t priority, TaskHandle_t* handle,
+                                   BaseType_t preferredCore);
+
+void saveConfig();
+void updateOnlineOTAProgress(size_t writtenBytes, size_t totalBytes);
+void onlineOTATask(void* param);
+void onlineOTAGitHubLatestTask(void* param);
 
 void copyStringToBuffer(char* dest, size_t size, const String& value) {
     memset(dest, 0, size);
@@ -152,6 +180,28 @@ String jsonEscape(const String& value) {
     return escaped;
 }
 
+const char* getOnlineOTAStateText(OnlineOTAState state) {
+    switch (state) {
+        case OnlineOTAState::Running: return "running";
+        case OnlineOTAState::Success: return "success";
+        case OnlineOTAState::Error:   return "error";
+        case OnlineOTAState::Idle:
+        default:
+            return "idle";
+    }
+}
+
+void setOnlineOTAStatus(OnlineOTAState state, const String& message) {
+    otaStatus.state = state;
+    copyStringToBuffer(otaStatus.message, sizeof(otaStatus.message), message);
+    Serial.printf("Online OTA status -> %s: %s\n", getOnlineOTAStateText(state), otaStatus.message);
+}
+
+void updateOnlineOTAProgress(size_t writtenBytes, size_t totalBytes) {
+    otaStatus.writtenBytes = writtenBytes;
+    otaStatus.totalBytes = totalBytes;
+}
+
 String getGitHubLatestDownloadUrl() {
     return "https://github.com/" + String(GITHUB_REPO) + "/releases/latest/download/" + String(GITHUB_RELEASE_ASSET_NAME);
 }
@@ -175,6 +225,72 @@ bool normalizeOTAUrl(const String& input, bool allowEmpty, String& normalized, S
     }
 
     return true;
+}
+
+void onlineOTATask(void* param) {
+    Serial.printf("onlineOTATask begin: %s\n", otaCfg.url);
+    updateOnlineOTAProgress(0, 0);
+    vTaskDelay(pdMS_TO_TICKS(750));
+    String error;
+    String url = String(otaCfg.url);
+    bool ok = performOnlineOTA(url, error, updateOnlineOTAProgress);
+    Serial.printf("onlineOTATask done: ok=%d error=%s\n", ok ? 1 : 0, error.c_str());
+
+    otaOnlineInProgress = false;
+    if (ok) {
+        setOnlineOTAStatus(OnlineOTAState::Success, "更新包已写入，设备准备重启...");
+        otaPendingRestart = true;
+    } else {
+        setOnlineOTAStatus(OnlineOTAState::Error, error.isEmpty() ? "在线更新失败" : error);
+    }
+
+    otaOnlineTaskHandle = nullptr;
+    Serial.println("onlineOTATask exit");
+    vTaskDelete(NULL);
+}
+
+void onlineOTAGitHubLatestTask(void* param) {
+    Serial.println("onlineOTAGitHubLatestTask begin");
+    setOnlineOTAStatus(OnlineOTAState::Running, "正在检查 GitHub 最新固件...");
+    updateOnlineOTAProgress(0, 0);
+
+    String latestVersion;
+    String assetUrl;
+    String latestDownloadUrl;
+    size_t assetSizeBytes = 0;
+    String error;
+    bool ok = fetchLatestGitHubRelease(String(GITHUB_REPO), String(GITHUB_RELEASE_ASSET_NAME),
+                                       latestVersion, assetUrl, latestDownloadUrl, assetSizeBytes, error);
+    if (!ok || assetUrl.isEmpty()) {
+        otaOnlineInProgress = false;
+        setOnlineOTAStatus(OnlineOTAState::Error, error.isEmpty() ? "获取 GitHub 最新固件失败" : error);
+        otaOnlineTaskHandle = nullptr;
+        Serial.printf("onlineOTAGitHubLatestTask failed: %s\n", error.c_str());
+        vTaskDelete(NULL);
+        return;
+    }
+
+    Serial.printf("onlineOTAGitHubLatestTask asset: %s\n", assetUrl.c_str());
+    copyStringToBuffer(otaCfg.url, sizeof(otaCfg.url), assetUrl);
+    saveConfig();
+    updateOnlineOTAProgress(0, assetSizeBytes);
+    setOnlineOTAStatus(OnlineOTAState::Running, "正在从 GitHub 下载并写入固件，请勿断电...");
+    vTaskDelay(pdMS_TO_TICKS(750));
+
+    ok = performOnlineOTA(assetUrl, error, updateOnlineOTAProgress);
+    Serial.printf("onlineOTAGitHubLatestTask done: ok=%d error=%s\n", ok ? 1 : 0, error.c_str());
+
+    otaOnlineInProgress = false;
+    if (ok) {
+        setOnlineOTAStatus(OnlineOTAState::Success, "更新包已写入，设备准备重启...");
+        otaPendingRestart = true;
+    } else {
+        setOnlineOTAStatus(OnlineOTAState::Error, error.isEmpty() ? "在线更新失败" : error);
+    }
+
+    otaOnlineTaskHandle = nullptr;
+    Serial.println("onlineOTAGitHubLatestTask exit");
+    vTaskDelete(NULL);
 }
 
 bool isReservedUpstreamSSID(const String& ssid) {
@@ -620,6 +736,8 @@ void applyUpstreamWiFiConfig() {
 }
 
 void serviceUpstreamWiFi() {
+    if (otaOnlineInProgress) return;
+
     if (wifiCfg.applyRequested) {
         wifiCfg.applyRequested = false;
         applyUpstreamWiFiConfig();
@@ -801,6 +919,10 @@ String buildStatusJson() {
     String natStatus = jsonEscape(String(getNATStatusText()));
     String thermalStatusText = jsonEscape(String(getThermalStatusText()));
     String fwVersion = jsonEscape(String(APP_VERSION));
+    String otaOnlineState = jsonEscape(String(getOnlineOTAStateText(static_cast<OnlineOTAState>(otaStatus.state))));
+    String otaOnlineMessage = jsonEscape(String(otaStatus.message));
+    size_t otaOnlineTotalBytes = otaStatus.totalBytes;
+    size_t otaOnlineWrittenBytes = otaStatus.writtenBytes;
     String savedNetworks = buildSavedUpstreamNetworksJson();
     uint32_t dnsBlockedCount = 0;
     size_t dnsBlockedRecentCount = 0;
@@ -811,7 +933,7 @@ String buildStatusJson() {
         : NAN;
     String json;
 
-    json.reserve(7300);
+    json.reserve(7800);
     json += "{";
     json += "\"rx\":";
     json += String((unsigned)cfg.rxCount);
@@ -908,7 +1030,17 @@ String buildStatusJson() {
     json += githubAssetName;
     json += "\",\"githubLatestDownloadUrl\":\"";
     json += githubLatestDownloadUrl;
-    json += "\",\"dnsWhitelistEnable\":";
+    json += "\",\"otaOnlineInProgress\":";
+    json += (otaOnlineInProgress ? "true" : "false");
+    json += ",\"otaOnlineState\":\"";
+    json += otaOnlineState;
+    json += "\",\"otaOnlineMessage\":\"";
+    json += otaOnlineMessage;
+    json += "\",\"otaOnlineTotalBytes\":";
+    json += String(static_cast<unsigned>(otaOnlineTotalBytes));
+    json += ",\"otaOnlineWrittenBytes\":";
+    json += String(static_cast<unsigned>(otaOnlineWrittenBytes));
+    json += ",\"dnsWhitelistEnable\":";
     json += String((int)dnsCfg.enabled);
     json += ",\"dnsWhitelistCount\":";
     json += String((unsigned)getDNSRuleCount(dnsCfg.allowlist));
@@ -1162,6 +1294,94 @@ void setupWebServer() {
         req->send(200, "text/plain", "OK");
     });
 
+    auto startOnlineOTA = [](AsyncWebServerRequest* req, const String& normalized) {
+        if (otaOnlineInProgress) {
+            Serial.println("HTTP /api/ota/online rejected: OTA already running");
+            req->send(409, "text/plain", "在线更新进行中，请稍后再试");
+            return;
+        }
+
+        Serial.printf("HTTP /api/ota/online url: %s\n", normalized.c_str());
+        copyStringToBuffer(otaCfg.url, sizeof(otaCfg.url), normalized);
+        saveConfig();
+
+        setOnlineOTAStatus(OnlineOTAState::Running, "正在下载并写入固件，请勿断电...");
+        otaOnlineInProgress = true;
+        BaseType_t taskCreated = createWorkerTask(onlineOTATask, "OnlineOTA", 10240, NULL, 1, &otaOnlineTaskHandle, 0);
+        if (taskCreated != pdPASS) {
+            otaOnlineInProgress = false;
+            otaOnlineTaskHandle = nullptr;
+            setOnlineOTAStatus(OnlineOTAState::Error, "无法启动在线更新任务");
+            Serial.println("HTTP /api/ota/online failed: createWorkerTask");
+            req->send(500, "text/plain", "无法启动在线更新任务");
+            return;
+        }
+
+        Serial.printf("HTTP /api/ota/online task created: handle=%p\n", otaOnlineTaskHandle);
+        req->send(200, "text/plain", "ASYNC_STARTED_V2");
+    };
+
+    auto handleOnlineOTARequest = [startOnlineOTA](AsyncWebServerRequest* req, const String& rawUrl) {
+        Serial.println("HTTP /api/ota/online request received");
+        String normalized;
+        String error;
+        if (!normalizeOTAUrl(rawUrl, false, normalized, error)) {
+            Serial.printf("HTTP /api/ota/online rejected: %s\n", error.c_str());
+            req->send(400, "text/plain", error);
+            return;
+        }
+        startOnlineOTA(req, normalized);
+    };
+
+    auto handleGitHubLatestOTARequest = [](AsyncWebServerRequest* req) {
+        Serial.println("HTTP GitHub OTA start request received");
+        if (otaOnlineInProgress) {
+            Serial.println("HTTP GitHub OTA start rejected: OTA already running");
+            req->send(409, "text/plain", "在线更新进行中，请稍后再试");
+            return;
+        }
+
+        setOnlineOTAStatus(OnlineOTAState::Running, "正在检查 GitHub 最新固件...");
+        otaOnlineInProgress = true;
+        BaseType_t taskCreated = createWorkerTask(onlineOTAGitHubLatestTask, "GitHubOTA", 12288, NULL, 1, &otaOnlineTaskHandle, 0);
+        if (taskCreated != pdPASS) {
+            otaOnlineInProgress = false;
+            otaOnlineTaskHandle = nullptr;
+            setOnlineOTAStatus(OnlineOTAState::Error, "无法启动 GitHub 在线更新任务");
+            Serial.println("HTTP GitHub OTA start failed: createWorkerTask");
+            req->send(500, "text/plain", "无法启动 GitHub 在线更新任务");
+            return;
+        }
+
+        Serial.printf("HTTP GitHub OTA start task created: handle=%p\n", otaOnlineTaskHandle);
+        req->send(200, "text/plain", "ASYNC_GITHUB_OTA_STARTED");
+    };
+
+    server.on("/api/ota/online/github/latest", HTTP_GET, handleGitHubLatestOTARequest);
+    server.on("/api/githubota/start", HTTP_GET, handleGitHubLatestOTARequest);
+
+    server.on("/api/ota/online", HTTP_GET, [handleOnlineOTARequest](AsyncWebServerRequest* req) {
+        if (!req->hasParam("url")) {
+            Serial.println("HTTP /api/ota/online rejected: missing url");
+            req->send(400, "text/plain", "缺少在线固件地址");
+            return;
+        }
+        handleOnlineOTARequest(req, req->getParam("url")->value());
+    });
+
+    server.on("/api/ota/online", HTTP_POST, [handleOnlineOTARequest](AsyncWebServerRequest* req) {
+        if (req->hasParam("url", true)) {
+            handleOnlineOTARequest(req, req->getParam("url", true)->value());
+            return;
+        }
+        if (req->hasParam("url")) {
+            handleOnlineOTARequest(req, req->getParam("url")->value());
+            return;
+        }
+        Serial.println("HTTP /api/ota/online rejected: missing url");
+        req->send(400, "text/plain", "缺少在线固件地址");
+    });
+
     server.on("/api/ota", HTTP_POST,
         [](AsyncWebServerRequest* req) {
             bool ok = !Update.hasError();
@@ -1195,10 +1415,11 @@ void setupWebServer() {
         String latestVersion;
         String assetUrl;
         String latestDownloadUrl;
+        size_t assetSizeBytes = 0;
         String error;
 
         if (!fetchLatestGitHubRelease(String(GITHUB_REPO), String(GITHUB_RELEASE_ASSET_NAME),
-                                      latestVersion, assetUrl, latestDownloadUrl, error)) {
+                                      latestVersion, assetUrl, latestDownloadUrl, assetSizeBytes, error)) {
             req->send(502, "text/plain", error);
             return;
         }
@@ -1216,44 +1437,13 @@ void setupWebServer() {
         json += jsonEscape(assetUrl);
         json += "\",\"latestDownloadUrl\":\"";
         json += jsonEscape(latestDownloadUrl);
-        json += "\",\"updateAvailable\":";
+        json += "\",\"assetSizeBytes\":";
+        json += String(static_cast<unsigned>(assetSizeBytes));
+        json += ",\"updateAvailable\":";
         json += (latestVersion != String(APP_VERSION) ? "true" : "false");
         json += "}";
 
         req->send(200, "application/json", json);
-    });
-
-    server.on("/api/ota/online", HTTP_POST, [](AsyncWebServerRequest* req) {
-        if (otaOnlineInProgress) {
-            req->send(409, "text/plain", "在线更新进行中，请稍后再试");
-            return;
-        }
-        if (!req->hasParam("url", true)) {
-            req->send(400, "text/plain", "缺少在线固件地址");
-            return;
-        }
-
-        String normalized;
-        String error;
-        if (!normalizeOTAUrl(req->getParam("url", true)->value(), false, normalized, error)) {
-            req->send(400, "text/plain", error);
-            return;
-        }
-
-        copyStringToBuffer(otaCfg.url, sizeof(otaCfg.url), normalized);
-        saveConfig();
-
-        otaOnlineInProgress = true;
-        bool ok = performOnlineOTA(normalized, error);
-        otaOnlineInProgress = false;
-
-        if (!ok) {
-            req->send(502, "text/plain", error);
-            return;
-        }
-
-        req->send(200, "text/plain", "OK");
-        otaPendingRestart = true;
     });
 
     server.on("/api/restart", HTTP_POST, [](AsyncWebServerRequest* req) {
@@ -1351,6 +1541,9 @@ void setup() {
 
 void loop() {
     if (otaPendingRestart) {
+        Serial.printf("otaPendingRestart set, rebooting with state=%s message=%s\n",
+                      getOnlineOTAStateText(static_cast<OnlineOTAState>(otaStatus.state)),
+                      otaStatus.message);
         delay(1000);  // let response finish sending
         ESP.restart();
     }

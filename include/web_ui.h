@@ -550,9 +550,12 @@ body{padding:12px}
       <div class="ota-panel-title">自动更新</div>
       <div class="status-row"><span>当前固件版本</span><span id="sFirmwareVersion" class="status-ok status-text status-wide">--</span></div>
       <div class="status-row"><span>GitHub 最新版本</span><span id="sGitHubLatestVersion" class="status-no status-text status-wide">未检查</span></div>
+      <div class="status-row"><span>更新包大小</span><span id="sGitHubAssetSize" class="status-no status-text status-wide">未检查</span></div>
+      <div class="status-row"><span>下载进度</span><span id="sGitHubProgressText" class="status-no status-text status-wide">未开始</span></div>
       <div class="actions">
         <button class="save-btn" type="button" id="githubOtaBtn" onclick="doGitHubOTA()">检查更新</button>
       </div>
+      <div class="progress" id="githubOtaProgWrap"><div class="progress-bar" id="githubOtaProgBar"></div></div>
       <div class="hint">设备默认从 GitHub Release 下载当前板型对应的 OTA 固件包更新，无需手动填写固件地址。</div>
       <div class="msg" id="otaGitHubMsg"></div>
     </div>
@@ -607,9 +610,12 @@ body{padding:12px}
     <div class="version-body">
       <div class="status-row"><span>当前固件版本</span><span id="versionModalCurrent" class="status-ok status-text status-wide">--</span></div>
       <div class="status-row"><span>GitHub 最新版本</span><span id="versionModalLatest" class="status-no status-text status-wide">未检查</span></div>
+      <div class="status-row"><span>更新包大小</span><span id="versionModalSize" class="status-no status-text status-wide">未检查</span></div>
+      <div class="status-row"><span>下载进度</span><span id="versionModalProgress" class="status-no status-text status-wide">未开始</span></div>
       <div class="version-actions">
         <button type="button" class="save-btn" id="versionActionBtn" onclick="doGitHubOTA()">检查更新</button>
       </div>
+      <div class="progress" id="versionGitHubProgWrap"><div class="progress-bar" id="versionGitHubProgBar"></div></div>
       <div class="hint">设备默认从 GitHub Release 下载当前板型对应的 OTA 固件包更新，无需手动填写固件地址。</div>
       <div class="msg" id="versionGitHubMsg"></div>
     </div>
@@ -624,8 +630,12 @@ let githubOtaCheckBusy=false;
 let githubLatestVersion='';
 let githubLatestAssetUrl='';
 let githubLatestDownloadUrl='';
+let githubLatestAssetSizeBytes=0;
 let githubUpdateAvailable=false;
 let githubOtaDownloading=false;
+let githubOtaPendingVerify=false;
+let githubOtaExpectedVersion='';
+let githubOtaVerifyDeadline=0;
 let currentFirmwareVersion='--';
 let scanResults=[];
 let pendingScanResultsRender=false;
@@ -855,6 +865,9 @@ function syncOtaForm(d){
   currentFirmwareVersion=d.fwVersion||'--';
   setWideStatusText('sFirmwareVersion',currentFirmwareVersion,'status-ok');
   if(d.githubLatestDownloadUrl)githubLatestDownloadUrl=d.githubLatestDownloadUrl;
+  syncGitHubOtaMetrics(Number(d.otaOnlineTotalBytes||0),Number(d.otaOnlineWrittenBytes||0));
+  syncOnlineOTAState(d);
+  syncGitHubOtaVerification();
   syncGitHubOtaButtons();
   syncVersionDialog();
 }
@@ -1548,6 +1561,153 @@ function setUploadOtaMessage(text,type){
   setOtaMessage('otaUploadMsg',text,type);
 }
 
+function formatBytes(bytes){
+  if(typeof bytes!=='number'||!Number.isFinite(bytes)||bytes<=0)return '--';
+  const units=['B','KB','MB','GB'];
+  let value=bytes;
+  let index=0;
+  while(value>=1024&&index<units.length-1){
+    value/=1024;
+    index++;
+  }
+  const digits=value>=100||index===0?0:(value>=10?1:2);
+  const text=value.toFixed(digits).replace(/\.0+$|(\.\d*[1-9])0+$/,'$1');
+  return text+' '+units[index];
+}
+
+function setMirroredWideStatusText(primaryId,secondaryId,text,className){
+  setWideStatusText(primaryId,text,className);
+  setWideStatusText(secondaryId,text,className);
+}
+
+function setMirroredProgress(primaryWrapId,primaryBarId,secondaryWrapId,secondaryBarId,visible,percent){
+  const wrapIds=[primaryWrapId,secondaryWrapId];
+  const barIds=[primaryBarId,secondaryBarId];
+  wrapIds.forEach((wrapId,index)=>{
+    const wrap=document.getElementById(wrapId);
+    const bar=document.getElementById(barIds[index]);
+    if(!wrap||!bar)return;
+    wrap.style.display=visible?'block':'none';
+    bar.style.width=(visible?String(percent):'0')+'%';
+  });
+}
+
+function syncGitHubOtaMetrics(totalBytes,writtenBytes){
+  const totalValid=typeof totalBytes==='number'&&Number.isFinite(totalBytes)&&totalBytes>0;
+  const writtenValid=typeof writtenBytes==='number'&&Number.isFinite(writtenBytes)&&writtenBytes>=0;
+  const effectiveTotal=totalValid?totalBytes:(githubLatestAssetSizeBytes>0?githubLatestAssetSizeBytes:0);
+  const sizeText=effectiveTotal>0?formatBytes(effectiveTotal):'未检查';
+  setMirroredWideStatusText('sGitHubAssetSize','versionModalSize',sizeText,effectiveTotal>0?'status-ok':'status-no');
+
+  let progressText='未开始';
+  let progressClass='status-no';
+  let progressPercent=0;
+  let showProgress=false;
+
+  if(totalValid){
+    const safeWritten=Math.min(Math.max(writtenBytes||0,0),totalBytes);
+    progressPercent=Math.min(100,Math.round(safeWritten/totalBytes*100));
+    progressText=formatBytes(safeWritten)+' / '+formatBytes(totalBytes)+' · '+String(progressPercent)+'%';
+    progressClass=safeWritten>=totalBytes&&totalBytes>0?'status-ok':'status-warn';
+    showProgress=true;
+  }else if(githubOtaDownloading){
+    progressText='连接中，等待设备返回包大小';
+    progressClass='status-warn';
+  }
+
+  setMirroredWideStatusText('sGitHubProgressText','versionModalProgress',progressText,progressClass);
+  setMirroredProgress('githubOtaProgWrap','githubOtaProgBar','versionGitHubProgWrap','versionGitHubProgBar',showProgress,progressPercent);
+}
+
+function getPreferredGitHubOtaUrl(){
+  return githubLatestAssetUrl||githubLatestDownloadUrl||'';
+}
+
+function resetGitHubOtaState(clearBusy){
+  githubOtaDownloading=false;
+  githubOtaPendingVerify=false;
+  githubOtaExpectedVersion='';
+  githubOtaVerifyDeadline=0;
+  if(clearBusy){
+    setOtaBusy(false);
+  }else{
+    syncGitHubOtaButtons();
+  }
+}
+
+function syncGitHubOtaVerification(){
+  if(!githubOtaPendingVerify)return;
+  if(githubOtaExpectedVersion&&currentFirmwareVersion===githubOtaExpectedVersion){
+    githubUpdateAvailable=false;
+    githubOtaPendingVerify=false;
+    githubOtaExpectedVersion='';
+    githubOtaVerifyDeadline=0;
+    setWideStatusText('sGitHubLatestVersion',currentFirmwareVersion+' · 已最新','status-ok');
+    setGitHubOtaMessage('设备已更新到 '+currentFirmwareVersion,'ok');
+    setOtaBusy(false);
+    return;
+  }
+  if(githubOtaVerifyDeadline>0&&Date.now()>githubOtaVerifyDeadline){
+    const expectedVersion=githubOtaExpectedVersion||githubLatestVersion||'--';
+    githubOtaPendingVerify=false;
+    githubOtaExpectedVersion='';
+    githubOtaVerifyDeadline=0;
+    setGitHubOtaMessage('设备已重连，但当前仍是 '+(currentFirmwareVersion||'--')+'，目标版本 '+expectedVersion,'err');
+    setOtaBusy(false);
+  }
+}
+
+function syncOnlineOTAState(d){
+  const inProgress=!!d.otaOnlineInProgress;
+  const state=String(d.otaOnlineState||'idle');
+  const message=d.otaOnlineMessage||'';
+  const totalBytes=Number.isFinite(Number(d.otaOnlineTotalBytes))?Number(d.otaOnlineTotalBytes):0;
+  const writtenBytes=Number.isFinite(Number(d.otaOnlineWrittenBytes))?Number(d.otaOnlineWrittenBytes):0;
+
+  syncGitHubOtaMetrics(totalBytes,writtenBytes);
+
+  if(inProgress){
+    if(!githubOtaDownloading){
+      githubOtaDownloading=true;
+      setOtaBusy(true);
+    }
+    setGitHubOtaMessage(message||'正在下载并写入固件，请勿断电...','');
+    return;
+  }
+
+  if(githubOtaDownloading&&githubOtaExpectedVersion&&currentFirmwareVersion===githubOtaExpectedVersion){
+    githubOtaDownloading=false;
+    githubUpdateAvailable=false;
+    setGitHubOtaMessage('设备已更新到 '+currentFirmwareVersion,'ok');
+    setOtaBusy(false);
+    return;
+  }
+
+  if(state==='success'){
+    if(githubOtaDownloading){
+      githubOtaDownloading=false;
+      githubOtaPendingVerify=true;
+      githubOtaVerifyDeadline=Date.now()+90000;
+      syncGitHubOtaButtons();
+    }
+    if(message)setGitHubOtaMessage(message,'ok');
+    return;
+  }
+
+  if(state==='error'){
+    if(githubOtaDownloading||githubOtaPendingVerify){
+      resetGitHubOtaState(true);
+    }
+    if(message)setGitHubOtaMessage(message,'err');
+    return;
+  }
+
+  if(githubOtaDownloading&&githubOtaVerifyDeadline>0&&Date.now()>githubOtaVerifyDeadline){
+    resetGitHubOtaState(true);
+    setGitHubOtaMessage('在线更新超时，请重试','err');
+  }
+}
+
 function syncGitHubOtaButtons(){
   const githubBtn=document.getElementById('githubOtaBtn');
   const versionActionBtn=document.getElementById('versionActionBtn');
@@ -1559,8 +1719,11 @@ function syncGitHubOtaButtons(){
     }else if(githubOtaDownloading){
       githubBtn.textContent='正在下载新版本';
       githubBtn.disabled=true;
+    }else if(githubOtaPendingVerify){
+      githubBtn.textContent='等待设备重启';
+      githubBtn.disabled=true;
     }else{
-      githubBtn.textContent=githubUpdateAvailable&&githubLatestDownloadUrl?'一键更新':'检查更新';
+      githubBtn.textContent=githubUpdateAvailable&&getPreferredGitHubOtaUrl()?'一键更新':'检查更新';
       githubBtn.disabled=!!otaBusy;
     }
   }
@@ -1570,10 +1733,12 @@ function syncGitHubOtaButtons(){
       versionActionBtn.textContent='正在检查更新';
     }else if(githubOtaDownloading){
       versionActionBtn.textContent='正在一键更新';
+    }else if(githubOtaPendingVerify){
+      versionActionBtn.textContent='等待设备重启';
     }else{
-      versionActionBtn.textContent=githubUpdateAvailable&&githubLatestDownloadUrl?'一键更新':'检查更新';
+      versionActionBtn.textContent=githubUpdateAvailable&&getPreferredGitHubOtaUrl()?'一键更新':'检查更新';
     }
-    versionActionBtn.disabled=!!otaBusy||githubOtaCheckBusy||githubOtaDownloading;
+    versionActionBtn.disabled=!!otaBusy||githubOtaCheckBusy||githubOtaDownloading||githubOtaPendingVerify;
   }
 
   syncVersionDialog();
@@ -1643,8 +1808,10 @@ async function checkGitHubLatest(showMessage){
     const data=JSON.parse(text);
     githubLatestVersion=data.latestVersion||'';
     githubLatestAssetUrl=data.assetUrl||'';
-    githubLatestDownloadUrl=data.latestDownloadUrl||data.assetUrl||'';
-    githubUpdateAvailable=!!(data.updateAvailable&&githubLatestDownloadUrl);
+    githubLatestDownloadUrl=data.latestDownloadUrl||'';
+    githubLatestAssetSizeBytes=Number.isFinite(Number(data.assetSizeBytes))?Number(data.assetSizeBytes):0;
+    githubUpdateAvailable=!!(data.updateAvailable&&getPreferredGitHubOtaUrl());
+    syncGitHubOtaMetrics(0,0);
 
     if(data.latestVersion){
       const statusText=data.latestVersion+(data.updateAvailable?' · 可更新':' · 已最新');
@@ -1695,24 +1862,42 @@ function doOTA(){
 function startOnlineOTARequest(url,pendingMessage){
   document.getElementById('progWrap').style.display='none';
   githubOtaDownloading=true;
+  githubOtaPendingVerify=false;
+  githubOtaVerifyDeadline=Date.now()+180000;
   setOtaBusy(true);
   syncGitHubOtaButtons();
   setGitHubOtaMessage(pendingMessage||'正在在线下载并写入固件，请勿断电...','');
+  syncGitHubOtaMetrics(0,0);
 
-  const body=new URLSearchParams();
-  body.set('url',url);
-
-  return fetch('/api/ota/online',{
-    method:'POST',
-    headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},
-    body:body.toString()
-  }).then(async r=>{
+  return fetch('/api/ota/online?url='+encodeURIComponent(url)).then(async r=>{
     const text=await r.text();
     if(!r.ok)throw new Error(text||'在线更新失败');
-    setGitHubOtaMessage('在线更新完成，正在重启...','ok');
+    setGitHubOtaMessage('在线更新任务已开始，正在后台下载并写入固件...','');
+    poll();
   }).catch(err=>{
-    githubOtaDownloading=false;
-    setOtaBusy(false);
+    resetGitHubOtaState(true);
+    setGitHubOtaMessage(err.message||'在线更新失败','err');
+    poll();
+  });
+}
+
+function startGitHubLatestOTARequest(pendingMessage){
+  document.getElementById('progWrap').style.display='none';
+  githubOtaDownloading=true;
+  githubOtaPendingVerify=false;
+  githubOtaVerifyDeadline=Date.now()+180000;
+  setOtaBusy(true);
+  syncGitHubOtaButtons();
+  setGitHubOtaMessage(pendingMessage||'正在从 GitHub 下载并更新固件，请勿断电...','');
+  syncGitHubOtaMetrics(0,0);
+
+  return fetch('/api/githubota/start').then(async r=>{
+    const text=await r.text();
+    if(!r.ok)throw new Error(text||'在线更新失败');
+    setGitHubOtaMessage('在线更新任务已开始，正在后台下载并写入固件...','');
+    poll();
+  }).catch(err=>{
+    resetGitHubOtaState(true);
     setGitHubOtaMessage(err.message||'在线更新失败','err');
     poll();
   });
@@ -1729,7 +1914,7 @@ async function doGitHubOTA(){
     return;
   }
 
-  const targetUrl=githubLatestDownloadUrl||githubLatestAssetUrl;
+  const targetUrl=getPreferredGitHubOtaUrl();
   if(!targetUrl){
     setGitHubOtaMessage('GitHub 最新版缺少固件下载地址','err');
     return;
@@ -1742,7 +1927,8 @@ async function doGitHubOTA(){
   });
   if(!confirmed)return;
 
-  startOnlineOTARequest(targetUrl,'正在从 GitHub 下载并更新固件，请勿断电...');
+  githubOtaExpectedVersion=githubLatestVersion||'';
+  startGitHubLatestOTARequest('正在从 GitHub 下载并更新固件，请勿断电...');
 }
 
 async function restartDevice(){
