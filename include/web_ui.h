@@ -666,6 +666,7 @@ let githubOtaPendingVerify=false;
 let githubOtaExpectedVersion='';
 let githubOtaVerifyDeadline=0;
 let currentFirmwareVersion='--';
+let latestHardwareInfoData=null;
 let latestStatusData=null;
 let scanResults=[];
 let pendingScanResultsRender=false;
@@ -673,6 +674,7 @@ let latestBlockedDnsRequests=[];
 let latestStatusUptime=0;
 let activePickerId='';
 let latestFsdEnableState=true;
+let hardwareInfoLoading=false;
 let confirmResolver=null;
 let confirmReturnFocus=null;
 const speedOffsetBucketIds=['speedOffsetPct0','speedOffsetPct1','speedOffsetPct2','speedOffsetPct3','speedOffsetPct4','speedOffsetPct5','speedOffsetPct6','speedOffsetPct7','speedOffsetPct8','speedOffsetPct9'];
@@ -728,8 +730,9 @@ function syncFsdToggleUI(enabled){
 }
 
 function syncHardwareInfoDialog(){
-  const data=latestStatusData||{};
-  setWideStatusText('hardwareInfoFw',data.fwVersion||'--',data.fwVersion?'status-ok':'status-no');
+  const data=latestHardwareInfoData||{};
+  const fwVersion=data.fwVersion||currentFirmwareVersion||'--';
+  setWideStatusText('hardwareInfoFw',fwVersion,fwVersion&&fwVersion!=='--'?'status-ok':'status-no');
   setWideStatusText('hardwareInfoChipModel',data.chipModel||'--',data.chipModel?'status-ok':'status-no');
   setWideStatusText('hardwareInfoChipRevision',typeof data.chipRevision==='number'&&Number.isFinite(data.chipRevision)?('Rev '+String(data.chipRevision)):'--',typeof data.chipRevision==='number'&&Number.isFinite(data.chipRevision)?'status-ok':'status-no');
   setWideStatusText('hardwareInfoChipCores',typeof data.chipCores==='number'&&Number.isFinite(data.chipCores)?String(data.chipCores):'--',typeof data.chipCores==='number'&&Number.isFinite(data.chipCores)?'status-ok':'status-no');
@@ -742,6 +745,25 @@ function syncHardwareInfoDialog(){
   setWideStatusText('hardwareInfoMinFreeHeap',typeof data.minFreeHeap==='number'&&Number.isFinite(data.minFreeHeap)?formatBytes(data.minFreeHeap):'--',typeof data.minFreeHeap==='number'&&Number.isFinite(data.minFreeHeap)?'status-ok':'status-no');
   const psramText=typeof data.psramSize==='number'&&Number.isFinite(data.psramSize)&&data.psramSize>0?formatBytes(data.psramSize):'无';
   setWideStatusText('hardwareInfoPsramSize',psramText,typeof data.psramSize==='number'&&Number.isFinite(data.psramSize)&&data.psramSize>0?'status-ok':'status-no');
+}
+
+// 打开弹窗时再读取硬件信息。
+function loadHardwareInfo(){
+  if(hardwareInfoLoading)return;
+  hardwareInfoLoading=true;
+  latestHardwareInfoData={fwVersion:currentFirmwareVersion||'--'};
+  syncHardwareInfoDialog();
+  fetch('/api/hardware').then(r=>{
+    if(!r.ok)throw new Error('hardware info failed');
+    return r.json();
+  }).then(d=>{
+    latestHardwareInfoData=d;
+    syncHardwareInfoDialog();
+  }).catch(()=>{
+    syncHardwareInfoDialog();
+  }).finally(()=>{
+    hardwareInfoLoading=false;
+  });
 }
 
 function syncToggleInput(inputOrId,enabled){
@@ -1219,7 +1241,6 @@ function poll(){
     setDnsStatValue('sDNSCount',String(d.dnsWhitelistCount||0),d.dnsWhitelistCount?'status-ok':'status-no');
     setDnsStatValue('sDNSBlockCount',String(d.dnsBlacklistCount||0),d.dnsBlacklistCount?'status-err':'status-no');
     setDnsStatValue('sDNSBlocked',String(d.dnsBlockedCount||0),d.dnsBlockedCount?'status-err':'status-no');
-    syncHardwareInfoDialog();
     latestBlockedDnsRequests=Array.isArray(d.dnsBlockedRequests)?d.dnsBlockedRequests:[];
     latestStatusUptime=d.uptime||0;
     renderBlockedDnsRequests(latestBlockedDnsRequests,latestStatusUptime);
@@ -1843,8 +1864,8 @@ function closeVersionDialog(evt){
 }
 
 function openHardwareInfoDialog(){
-  syncHardwareInfoDialog();
   document.getElementById('hardwareInfoModal').classList.add('open');
+  loadHardwareInfo();
 }
 
 function closeHardwareInfoDialog(evt){

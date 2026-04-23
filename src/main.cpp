@@ -983,6 +983,52 @@ int getCpuUsagePercent() {
 #endif
 }
 
+// 返回硬件信息弹窗所需数据。
+String buildHardwareInfoJson() {
+    String fwVersion = jsonEscape(String(APP_VERSION));
+    String chipModel = jsonEscape(String(ESP.getChipModel()));
+    uint16_t chipRevision = ESP.getChipRevision();
+    uint8_t chipCores = ESP.getChipCores();
+    uint32_t cpuFreqMHz = ESP.getCpuFreqMHz();
+    uint32_t flashChipSize = ESP.getFlashChipSize();
+    uint32_t flashChipSpeedMHz = ESP.getFlashChipSpeed() / 1000000u;
+    uint32_t sketchSize = ESP.getSketchSize();
+    uint32_t heapSize = ESP.getHeapSize();
+    uint32_t freeHeap = ESP.getFreeHeap();
+    uint32_t minFreeHeap = ESP.getMinFreeHeap();
+    uint32_t psramSize = ESP.getPsramSize();
+    String json;
+
+    json.reserve(320);
+    json += "{";
+    json += "\"fwVersion\":\"";
+    json += fwVersion;
+    json += "\",\"chipModel\":\"";
+    json += chipModel;
+    json += "\",\"chipRevision\":";
+    json += String(chipRevision);
+    json += ",\"chipCores\":";
+    json += String(chipCores);
+    json += ",\"cpuFreqMHz\":";
+    json += String(cpuFreqMHz);
+    json += ",\"flashChipSize\":";
+    json += String(flashChipSize);
+    json += ",\"flashChipSpeedMHz\":";
+    json += String(flashChipSpeedMHz);
+    json += ",\"sketchSize\":";
+    json += String(sketchSize);
+    json += ",\"heapSize\":";
+    json += String(heapSize);
+    json += ",\"freeHeap\":";
+    json += String(freeHeap);
+    json += ",\"minFreeHeap\":";
+    json += String(minFreeHeap);
+    json += ",\"psramSize\":";
+    json += String(psramSize);
+    json += "}";
+    return json;
+}
+
 String buildStatusJson() {
     uint32_t uptime = (millis() - cfg.uptimeStart) / 1000;
     bool upstreamConnected = WiFi.status() == WL_CONNECTED;
@@ -1006,21 +1052,10 @@ String buildStatusJson() {
     String natStatus = jsonEscape(String(getNATStatusText()));
     String thermalStatusText = jsonEscape(String(getThermalStatusText()));
     String fwVersion = jsonEscape(String(APP_VERSION));
-    String chipModel = jsonEscape(String(ESP.getChipModel()));
     String otaOnlineState = jsonEscape(String(getOnlineOTAStateText(static_cast<OnlineOTAState>(otaStatus.state))));
     String otaOnlineMessage = jsonEscape(String(otaStatus.message));
     size_t otaOnlineTotalBytes = otaStatus.totalBytes;
     size_t otaOnlineWrittenBytes = otaStatus.writtenBytes;
-    uint16_t chipRevision = ESP.getChipRevision();
-    uint8_t chipCores = ESP.getChipCores();
-    uint32_t cpuFreqMHz = ESP.getCpuFreqMHz();
-    uint32_t flashChipSize = ESP.getFlashChipSize();
-    uint32_t flashChipSpeedMHz = ESP.getFlashChipSpeed() / 1000000u;
-    uint32_t sketchSize = ESP.getSketchSize();
-    uint32_t heapSize = ESP.getHeapSize();
-    uint32_t freeHeap = ESP.getFreeHeap();
-    uint32_t minFreeHeap = ESP.getMinFreeHeap();
-    uint32_t psramSize = ESP.getPsramSize();
     String savedNetworks = buildSavedUpstreamNetworksJson();
     uint32_t dnsBlockedCount = 0;
     size_t dnsBlockedRecentCount = 0;
@@ -1044,29 +1079,6 @@ String buildStatusJson() {
     json += String((unsigned)uptime);
     json += ",\"cpuUsagePct\":";
     json += cpuUsagePct >= 0 ? String(cpuUsagePct) : "null";
-    json += ",\"chipModel\":\"";
-    json += chipModel;
-    json += "\"";
-    json += ",\"chipRevision\":";
-    json += String(chipRevision);
-    json += ",\"chipCores\":";
-    json += String(chipCores);
-    json += ",\"cpuFreqMHz\":";
-    json += String(cpuFreqMHz);
-    json += ",\"flashChipSize\":";
-    json += String(flashChipSize);
-    json += ",\"flashChipSpeedMHz\":";
-    json += String(flashChipSpeedMHz);
-    json += ",\"sketchSize\":";
-    json += String(sketchSize);
-    json += ",\"heapSize\":";
-    json += String(heapSize);
-    json += ",\"freeHeap\":";
-    json += String(freeHeap);
-    json += ",\"minFreeHeap\":";
-    json += String(minFreeHeap);
-    json += ",\"psramSize\":";
-    json += String(psramSize);
     json += ",\"chipTempC\":";
     json += std::isfinite(thermalStatus.currentC) ? String(thermalStatus.currentC, 1) : "null";
     json += ",\"chipTempAvgC\":";
@@ -1213,6 +1225,10 @@ void setupWebServer() {
 
     server.on("/api/status", HTTP_GET, [](AsyncWebServerRequest* req) {
         req->send(200, "application/json", buildStatusJson());
+    });
+
+    server.on("/api/hardware", HTTP_GET, [](AsyncWebServerRequest* req) {
+        req->send(200, "application/json", buildHardwareInfoJson());
     });
 
     server.on("/api/dns/blocked/clear", HTTP_GET, [](AsyncWebServerRequest* req) {
