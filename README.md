@@ -49,12 +49,12 @@
 | --- | --- | --- | --- | --- |
 | ESP32 DevKit | `esp32` | `GPIO5` | `GPIO4` | `GPIO2` |
 | ESP32-C3-DevKitM-1 | `esp32c3` | `GPIO5` | `GPIO4` | `GPIO8` |
-| ESP32-S3-DevKitC-1 | `esp32s3` | `GPIO5` | `GPIO4` | `GPIO48` |
+| Waveshare ESP32-S3-RS485-CAN | `esp32s3` | `GPIO15` | `GPIO16` | `GPIO48` |
 | ESP32-C5-WIFI6-KIT-N16R4 | `esp32c5` | `GPIO5` | `GPIO4` | `GPIO27` |
 | ESP32-C6-DevKitC-1 | `esp32c6` | `GPIO5` | `GPIO4` | `GPIO8` |
 
 如果你的实际接线不同，可以直接改 [platformio.ini](./platformio.ini) 里的 `build_flags`。
-如果你的 `ESP32-S3-DevKitC-1` 是较新的 `v1.1` 修订板，板载 RGB LED 可能在 `GPIO38`，这时请把 `PIN_LED` 从 `48` 改成 `38`。
+当前 `esp32s3` 环境的 TWAI 默认按 `Waveshare ESP32-S3-RS485-CAN` 处理；如果你的板载 LED 不亮，请按实物板型和修订版检查 `PIN_LED`。
 
 ## 源码编译
 编译老 ESP32：
@@ -158,5 +158,5 @@ pio run -e esp32c5 -t upload --upload-port <你的串口>
 ## 提示
 - 板子一般只支持 2.4G Wi-Fi，iPhone 共享热点可能需要打开兼容性模式
 - `ESP32-C3 / ESP32-C6` 这里先按通用开发板做了默认引脚适配，板载 LED 如果不亮，优先检查你买到的板子修订版和引脚图
-- `ESP32-S3` 这边默认按通用 `DevKitC-1` 配置处理，如果你的板载 LED 不亮，优先检查是不是 `GPIO38 / GPIO48` 差异
+- `ESP32-S3` 这边默认按 `Waveshare ESP32-S3-RS485-CAN` 的 TWAI 接线处理，板载 LED 如果不亮，优先按实物板型和修订版核对 `PIN_LED`
 - `ESP32-C5` 是单核芯片，因此固件是单独适配并单独打包的，不能直接刷老 `ESP32` 的 bin
